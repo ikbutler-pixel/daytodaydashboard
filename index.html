@@ -236,6 +236,18 @@
     color: #ffd89a;
   }
 
+  .section-title-split { display: block; }
+  .split-link {
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.25s ease;
+  }
+  .split-link:hover { color: #ffd89a; }
+  .split-at {
+    color: rgba(255,255,255,0.7);
+    font-weight: 400;
+  }
+
   .classes { list-style: none; }
   .classes .course {
     padding: 8px 0;
@@ -350,9 +362,35 @@
     display: flex;
     align-items: flex-start;
     gap: 14px;
-    padding: 11px 0;
+    padding: 11px 0 11px 14px;
+    position: relative;
     opacity: 0;
     animation: fadeUp 0.7s ease forwards;
+    transition: opacity 0.4s ease;
+    border-left: 3px solid transparent;
+    border-radius: 2px;
+    margin-left: -14px;
+  }
+  .event::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    bottom: 11px;
+    width: 3px;
+    background: var(--cal-color, #ffd89a);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--cal-color, #ffd89a);
+    opacity: 0.85;
+  }
+  .event.past {
+    opacity: 0.45;
+  }
+  .event.past .event-title,
+  .event.past .event-time,
+  .event.past .event-desc {
+    text-decoration: line-through;
+    text-decoration-color: rgba(255,255,255,0.4);
   }
   .event:nth-child(2) { animation-delay: 0.9s; }
   .event:nth-child(3) { animation-delay: 1.05s; }
@@ -510,7 +548,11 @@
       </div>
 
       <div>
-        <a href="https://canvas.ucsd.edu/" target="_blank" class="section-title section-title-link">Academics</a>
+        <div class="section-title section-title-split">
+          <a href="https://canvas.ucsd.edu/" target="_blank" class="split-link">Academics</a>
+          <span class="split-at"> at </span>
+          <a href="https://act.ucsd.edu/myTritonlink20/display.htm" target="_blank" class="split-link">UCSD</a>
+        </div>
         <ul class="classes">
           <li class="course">
             <div class="course-name">MATH 20B</div>
@@ -611,15 +653,18 @@
   document.getElementById('dateLabel').textContent =
     'It is ' + new Date().toLocaleDateString('en-US', dateOpts);
 
-  // === GOOGLE CALENDAR INTEGRATION ===
+  // === GOOGLE CALENDAR INTEGRATION (v9) ===
   const CLIENT_ID = '459626170607-1a9dreqb6dmb4jvegc01q6sq3jcb9pfc.apps.googleusercontent.com';
   const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
   const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+  const TOKEN_KEY = 'gcal_token_v9';
+  const TOKEN_EXPIRY_KEY = 'gcal_token_expiry_v9';
 
   const eventsEl = document.getElementById('events');
   let tokenClient;
   let gapiInited = false;
   let gisInited = false;
+  let silentRefreshTimer = null;
 
   function showMessage(text, withButton) {
     eventsEl.innerHTML = `<div class="schedule-msg">${text}</div>` +
@@ -631,7 +676,6 @@
 
   showMessage('Loading…', false);
 
-  // Wait for both Google libraries to load
   function checkLibsLoaded() {
     if (typeof gapi !== 'undefined' && typeof google !== 'undefined' && google.accounts) {
       initGapi();
@@ -646,7 +690,7 @@
     gapi.load('client', async () => {
       await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
       gapiInited = true;
-      maybeShowSignIn();
+      maybeStart();
     });
   }
 
@@ -654,23 +698,60 @@
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
-      callback: '', // set later
+      callback: '',
     });
     gisInited = true;
-    maybeShowSignIn();
+    maybeStart();
   }
 
-  function maybeShowSignIn() {
-    if (gapiInited && gisInited) {
-      // Try to silently restore a previous session
-      const savedToken = sessionStorage.getItem('gcal_token');
-      if (savedToken) {
-        gapi.client.setToken({ access_token: savedToken });
-        loadEvents();
-      } else {
-        showMessage('Connect your calendar to see today\u2019s schedule', true);
-      }
+  function maybeStart() {
+    if (!gapiInited || !gisInited) return;
+
+    // Try to restore from localStorage (persists across browser restarts)
+    const savedToken = localStorage.getItem(TOKEN_KEY);
+    const savedExpiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
+    const now = Date.now();
+
+    if (savedToken && savedExpiry > now + 60000) {
+      // Still valid for at least 1 minute
+      gapi.client.setToken({ access_token: savedToken });
+      loadEvents();
+      scheduleSilentRefresh(savedExpiry - now);
+    } else {
+      // Try silent refresh first (no popup, uses Google's still-active session)
+      attemptSilentRefresh();
     }
+  }
+
+  function attemptSilentRefresh() {
+    if (!tokenClient) return;
+    tokenClient.callback = (resp) => {
+      if (resp.error !== undefined || !resp.access_token) {
+        // Silent failed, need user to click sign in
+        showMessage('Connect your calendar to see today\u2019s schedule', true);
+        return;
+      }
+      const expiresInMs = (resp.expires_in || 3600) * 1000;
+      const expiry = Date.now() + expiresInMs;
+      localStorage.setItem(TOKEN_KEY, resp.access_token);
+      localStorage.setItem(TOKEN_EXPIRY_KEY, String(expiry));
+      gapi.client.setToken({ access_token: resp.access_token });
+      loadEvents();
+      scheduleSilentRefresh(expiresInMs);
+    };
+    // prompt: '' = silent, no popup if browser already has Google session
+    try {
+      tokenClient.requestAccessToken({ prompt: '' });
+    } catch (e) {
+      showMessage('Connect your calendar to see today\u2019s schedule', true);
+    }
+  }
+
+  function scheduleSilentRefresh(msUntilExpiry) {
+    if (silentRefreshTimer) clearTimeout(silentRefreshTimer);
+    // Refresh 5 minutes before expiry, minimum 1 minute from now
+    const refreshIn = Math.max(60000, msUntilExpiry - 5 * 60000);
+    silentRefreshTimer = setTimeout(attemptSilentRefresh, refreshIn);
   }
 
   function handleAuthClick() {
@@ -679,8 +760,12 @@
         showMessage('Sign-in failed. Try again.', true);
         return;
       }
-      sessionStorage.setItem('gcal_token', gapi.client.getToken().access_token);
+      const expiresInMs = (resp.expires_in || 3600) * 1000;
+      const expiry = Date.now() + expiresInMs;
+      localStorage.setItem(TOKEN_KEY, resp.access_token);
+      localStorage.setItem(TOKEN_EXPIRY_KEY, String(expiry));
       loadEvents();
+      scheduleSilentRefresh(expiresInMs);
     };
     if (gapi.client.getToken() === null) {
       tokenClient.requestAccessToken({ prompt: 'consent' });
@@ -697,18 +782,17 @@
       const end = new Date();
       end.setHours(23, 59, 59, 999);
 
-      // Step 1: Get list of all calendars the user has access to
+      // Step 1: Get all calendars
       const calListResp = await gapi.client.calendar.calendarList.list({
         minAccessRole: 'reader',
       });
       const calendars = (calListResp.result.items || []).filter(c => {
-        // Skip hidden calendars and the noisy "Birthdays"/"Holidays" ones unless you want them
         if (c.hidden) return false;
         if (c.id && c.id.includes('#holiday@')) return false;
         return true;
       });
 
-      // Step 2: Fetch events from each calendar in parallel
+      // Step 2: Fetch in parallel
       const fetchPromises = calendars.map(cal =>
         gapi.client.calendar.events.list({
           calendarId: cal.id,
@@ -718,7 +802,11 @@
           singleEvents: true,
           orderBy: 'startTime',
           maxResults: 20,
-        }).then(r => (r.result.items || []).map(e => ({ ...e, _calName: cal.summary, _calColor: cal.backgroundColor })))
+        }).then(r => (r.result.items || []).map(e => ({
+          ...e,
+          _calName: cal.summary,
+          _calColor: cal.backgroundColor || '#ffd89a',
+        })))
           .catch(err => { console.warn('Failed to load calendar', cal.summary, err); return []; })
       );
 
@@ -735,8 +823,10 @@
       renderEvents(allEvents);
     } catch (err) {
       console.error(err);
-      sessionStorage.removeItem('gcal_token');
-      showMessage('Session expired. Sign in again.', true);
+      // Token might be expired/invalid - try silent refresh once
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_EXPIRY_KEY);
+      attemptSilentRefresh();
     }
   }
 
@@ -745,16 +835,24 @@
       eventsEl.innerHTML = '<div class="schedule-msg">Nothing on the calendar today \u2014 enjoy it.</div>';
       return;
     }
+    const now = new Date();
     eventsEl.innerHTML = '';
     events.forEach((e, i) => {
       const startRaw = e.start.dateTime || e.start.date;
+      const endRaw = e.end ? (e.end.dateTime || e.end.date) : startRaw;
       const isAllDay = !e.start.dateTime;
       const time = isAllDay ? 'All day' : new Date(startRaw).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       const title = e.summary || '(No title)';
       const desc = e.location || '';
       const num = String(i + 1).padStart(2, '0');
+      const color = e._calColor || '#ffd89a';
+
+      // Past event detection: end time has passed
+      const endDate = new Date(endRaw);
+      const isPast = !isAllDay && endDate < now;
+
       eventsEl.innerHTML += `
-        <div class="event">
+        <div class="event ${isPast ? 'past' : ''}" style="--cal-color: ${color};">
           <div class="event-num">${num}</div>
           <div class="event-body">
             <div class="event-row">
@@ -770,6 +868,13 @@
   function escapeHtml(s) {
     return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+
+  // Refresh when the tab becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && gapiInited && gisInited && gapi.client.getToken()) {
+      loadEvents();
+    }
+  });
 </script>
 </body>
 </html>
