@@ -697,21 +697,44 @@
       const end = new Date();
       end.setHours(23, 59, 59, 999);
 
-      const response = await gapi.client.calendar.events.list({
-        calendarId: 'primary',
-        timeMin: start.toISOString(),
-        timeMax: end.toISOString(),
-        showDeleted: false,
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 20,
+      // Step 1: Get list of all calendars the user has access to
+      const calListResp = await gapi.client.calendar.calendarList.list({
+        minAccessRole: 'reader',
+      });
+      const calendars = (calListResp.result.items || []).filter(c => {
+        // Skip hidden calendars and the noisy "Birthdays"/"Holidays" ones unless you want them
+        if (c.hidden) return false;
+        if (c.id && c.id.includes('#holiday@')) return false;
+        return true;
       });
 
-      const events = response.result.items || [];
-      renderEvents(events);
+      // Step 2: Fetch events from each calendar in parallel
+      const fetchPromises = calendars.map(cal =>
+        gapi.client.calendar.events.list({
+          calendarId: cal.id,
+          timeMin: start.toISOString(),
+          timeMax: end.toISOString(),
+          showDeleted: false,
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 20,
+        }).then(r => (r.result.items || []).map(e => ({ ...e, _calName: cal.summary, _calColor: cal.backgroundColor })))
+          .catch(err => { console.warn('Failed to load calendar', cal.summary, err); return []; })
+      );
+
+      const results = await Promise.all(fetchPromises);
+      const allEvents = results.flat();
+
+      // Step 3: Sort by start time
+      allEvents.sort((a, b) => {
+        const aStart = a.start.dateTime || a.start.date;
+        const bStart = b.start.dateTime || b.start.date;
+        return new Date(aStart) - new Date(bStart);
+      });
+
+      renderEvents(allEvents);
     } catch (err) {
       console.error(err);
-      // Token might be expired
       sessionStorage.removeItem('gcal_token');
       showMessage('Session expired. Sign in again.', true);
     }
