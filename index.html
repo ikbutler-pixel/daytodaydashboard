@@ -713,13 +713,16 @@
     const now = Date.now();
 
     if (savedToken && savedExpiry > now + 60000) {
-      // Still valid for at least 1 minute
+      // Still valid for at least 1 minute - use it directly
       gapi.client.setToken({ access_token: savedToken });
       loadEvents();
+      // Schedule a silent refresh BEFORE this token expires (this works because by then
+      // the user has already interacted with the page in this session)
       scheduleSilentRefresh(savedExpiry - now);
     } else {
-      // Try silent refresh first (no popup, uses Google's still-active session)
-      attemptSilentRefresh();
+      // No valid saved token - user must click sign in
+      // (We can't silent-refresh here because browsers block popups not triggered by clicks)
+      showMessage('Connect your calendar to see today\u2019s schedule', true);
     }
   }
 
@@ -727,8 +730,10 @@
     if (!tokenClient) return;
     tokenClient.callback = (resp) => {
       if (resp.error !== undefined || !resp.access_token) {
-        // Silent failed, need user to click sign in
-        showMessage('Connect your calendar to see today\u2019s schedule', true);
+        // Silent failed - clear stored token and show sign in
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_EXPIRY_KEY);
+        showMessage('Session expired. Sign in again.', true);
         return;
       }
       const expiresInMs = (resp.expires_in || 3600) * 1000;
@@ -739,11 +744,15 @@
       loadEvents();
       scheduleSilentRefresh(expiresInMs);
     };
-    // prompt: '' = silent, no popup if browser already has Google session
     try {
+      // prompt: '' = silent. Only call this after the user has interacted with the page,
+      // never on initial load.
       tokenClient.requestAccessToken({ prompt: '' });
     } catch (e) {
-      showMessage('Connect your calendar to see today\u2019s schedule', true);
+      console.warn('Silent refresh threw:', e);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_EXPIRY_KEY);
+      showMessage('Session expired. Sign in again.', true);
     }
   }
 
@@ -823,10 +832,10 @@
       renderEvents(allEvents);
     } catch (err) {
       console.error(err);
-      // Token might be expired/invalid - try silent refresh once
+      // Token might be expired/invalid - clear and show sign in
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(TOKEN_EXPIRY_KEY);
-      attemptSilentRefresh();
+      showMessage('Session expired. Sign in again.', true);
     }
   }
 
