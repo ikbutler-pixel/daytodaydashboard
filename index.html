@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
@@ -93,7 +95,8 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: min(1180px, 92vw);
-    height: min(700px, 86vh);
+    height: min(760px, 90vh);
+    max-height: 90vh;
 
     /* Blue-tinted glass */
     background:
@@ -119,12 +122,22 @@
 
     display: grid;
     grid-template-columns: 250px 1fr 250px;
-    padding: 44px 44px 40px;
-    gap: 36px;
+    padding: 38px 44px 34px;
+    gap: 32px;
+    overflow: hidden;
 
     opacity: 0;
     animation: cardIn 1.4s cubic-bezier(0.2, 0.9, 0.3, 1) 0.3s forwards;
   }
+
+  /* Inner columns scroll independently if content overflows */
+  .left, .center, .right {
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .left::-webkit-scrollbar,
+  .center::-webkit-scrollbar,
+  .right::-webkit-scrollbar { display: none; }
 
   /* Bubbly top highlight (shine) */
   .card::before {
@@ -146,7 +159,7 @@
   }
 
   /* === LEFT SIDEBAR === */
-  .left { display: flex; flex-direction: column; gap: 32px; position: relative; }
+  .left { display: flex; flex-direction: column; gap: 24px; position: relative; }
 
   .routine-btn {
     display: inline-flex;
@@ -380,6 +393,37 @@
     font-weight: 300;
   }
 
+  /* Sign-in button + states */
+  .signin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 999px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    cursor: pointer;
+    margin-top: 14px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+  .signin-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+  }
+  .schedule-msg {
+    font-size: 12.5px;
+    color: #b8c8e0;
+    text-align: center;
+    padding: 14px 0 4px;
+    font-style: italic;
+    font-family: 'Cormorant Garamond', serif;
+  }
+
   /* === RIGHT SIDEBAR === */
   .right { display: flex; flex-direction: column; gap: 32px; }
 
@@ -567,28 +611,142 @@
   document.getElementById('dateLabel').textContent =
     'It is ' + new Date().toLocaleDateString('en-US', dateOpts);
 
-  // Mock events — will hook to Google Calendar API later
-  const events = [
-    { title: 'MATH 20B Lecture',   time: '9:00 AM',  desc: 'Center Hall 105' },
-    { title: 'CHEM 6A Lecture',    time: '11:00 AM', desc: 'York Hall 2622' },
-    { title: 'Ascend GBM',         time: '2:00 PM',  desc: 'Price Center West' },
-    { title: 'Study session',      time: '6:30 PM',  desc: 'Geisel 2nd floor' },
-  ];
+  // === GOOGLE CALENDAR INTEGRATION ===
+  const CLIENT_ID = '459626170607-1a9dreqb6dmb4jvegc01q6sq3jcb9pfc.apps.googleusercontent.com';
+  const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
+  const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 
   const eventsEl = document.getElementById('events');
-  events.forEach((e, i) => {
-    eventsEl.innerHTML += `
-      <div class="event">
-        <div class="event-num">0${i+1}</div>
-        <div class="event-body">
-          <div class="event-row">
-            <div class="event-title">${e.title}</div>
-            <div class="event-time">${e.time}</div>
+  let tokenClient;
+  let gapiInited = false;
+  let gisInited = false;
+
+  function showMessage(text, withButton) {
+    eventsEl.innerHTML = `<div class="schedule-msg">${text}</div>` +
+      (withButton ? `<div style="text-align:center;"><button class="signin-btn" id="signinBtn">Sign in with Google</button></div>` : '');
+    if (withButton) {
+      document.getElementById('signinBtn').addEventListener('click', handleAuthClick);
+    }
+  }
+
+  showMessage('Loading…', false);
+
+  // Wait for both Google libraries to load
+  function checkLibsLoaded() {
+    if (typeof gapi !== 'undefined' && typeof google !== 'undefined' && google.accounts) {
+      initGapi();
+      initGis();
+    } else {
+      setTimeout(checkLibsLoaded, 100);
+    }
+  }
+  checkLibsLoaded();
+
+  function initGapi() {
+    gapi.load('client', async () => {
+      await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+      gapiInited = true;
+      maybeShowSignIn();
+    });
+  }
+
+  function initGis() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: '', // set later
+    });
+    gisInited = true;
+    maybeShowSignIn();
+  }
+
+  function maybeShowSignIn() {
+    if (gapiInited && gisInited) {
+      // Try to silently restore a previous session
+      const savedToken = sessionStorage.getItem('gcal_token');
+      if (savedToken) {
+        gapi.client.setToken({ access_token: savedToken });
+        loadEvents();
+      } else {
+        showMessage('Connect your calendar to see today\u2019s schedule', true);
+      }
+    }
+  }
+
+  function handleAuthClick() {
+    tokenClient.callback = (resp) => {
+      if (resp.error !== undefined) {
+        showMessage('Sign-in failed. Try again.', true);
+        return;
+      }
+      sessionStorage.setItem('gcal_token', gapi.client.getToken().access_token);
+      loadEvents();
+    };
+    if (gapi.client.getToken() === null) {
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+      tokenClient.requestAccessToken({ prompt: '' });
+    }
+  }
+
+  async function loadEvents() {
+    showMessage('Loading your schedule…', false);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+
+      const response = await gapi.client.calendar.events.list({
+        calendarId: 'primary',
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        showDeleted: false,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 20,
+      });
+
+      const events = response.result.items || [];
+      renderEvents(events);
+    } catch (err) {
+      console.error(err);
+      // Token might be expired
+      sessionStorage.removeItem('gcal_token');
+      showMessage('Session expired. Sign in again.', true);
+    }
+  }
+
+  function renderEvents(events) {
+    if (events.length === 0) {
+      eventsEl.innerHTML = '<div class="schedule-msg">Nothing on the calendar today \u2014 enjoy it.</div>';
+      return;
+    }
+    eventsEl.innerHTML = '';
+    events.forEach((e, i) => {
+      const startRaw = e.start.dateTime || e.start.date;
+      const isAllDay = !e.start.dateTime;
+      const time = isAllDay ? 'All day' : new Date(startRaw).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      const title = e.summary || '(No title)';
+      const desc = e.location || '';
+      const num = String(i + 1).padStart(2, '0');
+      eventsEl.innerHTML += `
+        <div class="event">
+          <div class="event-num">${num}</div>
+          <div class="event-body">
+            <div class="event-row">
+              <div class="event-title">${escapeHtml(title)}</div>
+              <div class="event-time">${time}</div>
+            </div>
+            ${desc ? `<div class="event-desc">${escapeHtml(desc)}</div>` : ''}
           </div>
-          <div class="event-desc">${e.desc}</div>
-        </div>
-      </div>`;
-  });
+        </div>`;
+    });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
 </script>
 </body>
 </html>
