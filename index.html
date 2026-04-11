@@ -1466,8 +1466,16 @@
     const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     datesListEl.innerHTML = '';
     events.forEach(e => {
-      const startRaw = e.start.dateTime || e.start.date;
-      const d = new Date(startRaw);
+      let d;
+      if (e.start.dateTime) {
+        // Timed event - use as-is, browser handles timezone
+        d = new Date(e.start.dateTime);
+      } else {
+        // All-day event - date string like "2026-04-16" must be parsed as LOCAL date,
+        // not UTC, otherwise we shift back a day in negative-offset timezones
+        const [y, m, day] = e.start.date.split('-').map(Number);
+        d = new Date(y, m - 1, day);
+      }
       const dateLabel = `${months[d.getMonth()]} ${d.getDate()}`;
       // Strip the ⭐ from title for display
       const title = (e.summary || '').replace(/⭐\s*/g, '').trim();
