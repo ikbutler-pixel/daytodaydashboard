@@ -706,15 +706,21 @@
     letter-spacing: 0.5px;
   }
 
-  .dates-list { list-style: none; }
+  .dates-list { list-style: none; max-height: 320px; overflow-y: auto; scrollbar-width: none; }
+  .dates-list::-webkit-scrollbar { display: none; }
   .dates-list li {
     font-size: 13px;
     padding: 9px 0;
     color: #e6efff;
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     font-weight: 400;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    transition: opacity 0.4s ease;
   }
   .dates-list li:last-child { border-bottom: none; }
+  .dates-list li.dismissing { opacity: 0; }
   .dates-list .date {
     display: block;
     font-family: 'Cormorant Garamond', serif;
@@ -724,6 +730,72 @@
     font-weight: 600;
     margin-bottom: 3px;
     letter-spacing: 0.8px;
+  }
+  .dates-list .date-body { flex: 1; }
+
+  /* Day-of checkbox (only visible when event is happening today) */
+  .date-check {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid rgba(255, 216, 154, 0.7);
+    border-radius: 5px;
+    background: rgba(255, 216, 154, 0.08);
+    cursor: pointer;
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+    box-shadow: 0 0 8px rgba(255, 216, 154, 0.25);
+    position: relative;
+  }
+  .date-check:hover {
+    background: rgba(255, 216, 154, 0.18);
+    transform: scale(1.08);
+  }
+  .date-check::after {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: #ffd89a;
+    box-shadow: 0 0 6px #ffd89a;
+    transform: scale(0);
+    transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  }
+  .date-check.checked::after {
+    transform: scale(1);
+  }
+
+  /* See more / less toggle */
+  .dates-toggle {
+    background: none;
+    border: none;
+    color: #ffd89a;
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    padding: 12px 0 4px;
+    width: 100%;
+    text-align: center;
+    transition: color 0.2s ease, transform 0.2s ease;
+    display: block;
+  }
+  .dates-toggle:hover {
+    color: #fff;
+    transform: translateY(-1px);
+  }
+  .dates-toggle::after {
+    content: ' ↓';
+    display: inline-block;
+    transition: transform 0.3s ease;
+  }
+  .dates-toggle.expanded::after {
+    transform: rotate(180deg);
   }
 
   @media (max-width: 900px) {
@@ -1088,6 +1160,7 @@
         <ul class="dates-list" id="datesList">
           <li class="dates-loading">Loading…</li>
         </ul>
+        <button class="dates-toggle" id="datesToggle" style="display:none;">See more</button>
       </div>
     </aside>
   </div>
@@ -1458,32 +1531,134 @@
     }
   }
 
+  // Track expanded state and store all events globally
+  let datesExpanded = false;
+  let allStarredEvents = [];
+  const DISMISSED_KEY = 'dismissed_dates_v1';
+
+  function loadDismissed() {
+    try {
+      const raw = localStorage.getItem(DISMISSED_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      // Auto-clean: remove anything older than today
+      const todayStr = ymd(new Date());
+      const cleaned = {};
+      for (const k in parsed) {
+        if (parsed[k] >= todayStr) cleaned[k] = parsed[k];
+      }
+      saveDismissed(cleaned);
+      return cleaned;
+    } catch (e) { return {}; }
+  }
+  function saveDismissed(obj) {
+    try { localStorage.setItem(DISMISSED_KEY, JSON.stringify(obj)); } catch (e) {}
+  }
+  function ymd(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function eventStartLocal(e) {
+    if (e.start.dateTime) return new Date(e.start.dateTime);
+    const [y, m, day] = e.start.date.split('-').map(Number);
+    return new Date(y, m - 1, day);
+  }
+
+  function isHappeningToday(e) {
+    const today = ymd(new Date());
+    const eventDate = ymd(eventStartLocal(e));
+    return eventDate === today;
+  }
+
   function renderImportantDates(events) {
-    if (events.length === 0) {
-      datesListEl.innerHTML = '<li style="opacity:0.6; font-style:italic;">No starred events in the next 31 days</li>';
+    allStarredEvents = events;
+    const datesToggle = document.getElementById('datesToggle');
+    const dismissed = loadDismissed();
+
+    // Filter out dismissed events
+    const visible = events.filter(e => !dismissed[e.id]);
+
+    if (visible.length === 0) {
+      datesListEl.innerHTML = '<li style="opacity:0.6; font-style:italic; border:none;">No starred events in the next 31 days</li>';
+      datesToggle.style.display = 'none';
       return;
     }
+
+    // Split into next-14-days vs 15-31-days
+    const now = new Date();
+    const cutoff14 = new Date(now);
+    cutoff14.setDate(cutoff14.getDate() + 14);
+    cutoff14.setHours(23, 59, 59, 999);
+
+    const within14 = [];
+    const beyond14 = [];
+    visible.forEach(e => {
+      const d = eventStartLocal(e);
+      if (d <= cutoff14) within14.push(e);
+      else beyond14.push(e);
+    });
+
+    // Decide what to show based on expanded state
+    const toShow = datesExpanded ? visible : within14;
+
+    // Show toggle only if there's something beyond 14 days
+    if (beyond14.length > 0) {
+      datesToggle.style.display = 'block';
+      datesToggle.textContent = datesExpanded ? 'See less' : `See more (${beyond14.length})`;
+      datesToggle.classList.toggle('expanded', datesExpanded);
+    } else {
+      datesToggle.style.display = 'none';
+    }
+
+    // If within14 is empty but we have stuff beyond, show a message
+    if (toShow.length === 0) {
+      datesListEl.innerHTML = '<li style="opacity:0.6; font-style:italic; border:none;">Nothing in the next 14 days</li>';
+      return;
+    }
+
     const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     datesListEl.innerHTML = '';
-    events.forEach(e => {
-      let d;
-      if (e.start.dateTime) {
-        // Timed event - use as-is, browser handles timezone
-        d = new Date(e.start.dateTime);
-      } else {
-        // All-day event - date string like "2026-04-16" must be parsed as LOCAL date,
-        // not UTC, otherwise we shift back a day in negative-offset timezones
-        const [y, m, day] = e.start.date.split('-').map(Number);
-        d = new Date(y, m - 1, day);
-      }
+    toShow.forEach(e => {
+      const d = eventStartLocal(e);
       const dateLabel = `${months[d.getMonth()]} ${d.getDate()}`;
-      // Strip the ⭐ from title for display
       const title = (e.summary || '').replace(/⭐\s*/g, '').trim();
       const li = document.createElement('li');
-      li.innerHTML = `<span class="date">${dateLabel}</span>${escapeHtml(title)}`;
+      li.dataset.eventId = e.id;
+
+      const body = document.createElement('div');
+      body.className = 'date-body';
+      body.innerHTML = `<span class="date">${dateLabel}</span>${escapeHtml(title)}`;
+      li.appendChild(body);
+
+      // Day-of checkbox: only appears if event is happening today
+      if (isHappeningToday(e)) {
+        const check = document.createElement('div');
+        check.className = 'date-check';
+        check.title = 'Mark as done for today';
+        check.addEventListener('click', () => {
+          check.classList.add('checked');
+          li.classList.add('dismissing');
+          // Persist dismissal
+          const dismissedNow = loadDismissed();
+          dismissedNow[e.id] = ymd(new Date());
+          saveDismissed(dismissedNow);
+          // Remove from view after fade
+          setTimeout(() => {
+            renderImportantDates(allStarredEvents);
+          }, 400);
+        });
+        li.appendChild(check);
+      }
+
       datesListEl.appendChild(li);
     });
   }
+
+  // Wire up the see more / see less toggle
+  document.getElementById('datesToggle').addEventListener('click', () => {
+    datesExpanded = !datesExpanded;
+    renderImportantDates(allStarredEvents);
+  });
 
   // Important dates load is triggered from inside loadEvents() (see calendar section).
 
