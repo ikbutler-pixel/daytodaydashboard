@@ -169,45 +169,61 @@
   /* === ROUTINE SLIDE-DOWN PANEL === */
   .routine-panel {
     position: absolute;
-    top: 0;
-    left: -8px;
-    right: -8px;
-    bottom: 0;
+    top: 38px;
+    left: 36px;
+    width: 270px;
     background: linear-gradient(180deg,
-      rgba(20, 50, 110, 0.92) 0%,
+      rgba(25, 60, 130, 0.92) 0%,
       rgba(15, 35, 80, 0.95) 100%);
-    backdrop-filter: blur(20px) saturate(150%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    border-radius: 24px;
-    padding: 22px 22px 18px;
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    border-radius: 32px;
+    padding: 0 24px;
     z-index: 20;
     overflow-y: auto;
     scrollbar-width: none;
     box-shadow:
-      0 20px 60px rgba(0, 10, 30, 0.5),
-      0 0 0 1px rgba(255,255,255,0.1) inset,
-      0 2px 20px rgba(255,255,255,0.1) inset;
+      0 30px 70px rgba(0, 10, 30, 0.55),
+      0 10px 40px rgba(50, 120, 200, 0.2),
+      0 0 0 1px rgba(255,255,255,0.15) inset,
+      0 2px 25px rgba(255,255,255,0.12) inset,
+      0 -15px 50px rgba(100, 160, 220, 0.1) inset;
 
     /* Unroll animation */
     transform-origin: top center;
     max-height: 0;
     opacity: 0;
     pointer-events: none;
-    transition: max-height 0.55s cubic-bezier(0.2, 0.9, 0.3, 1),
+    transition: max-height 0.6s cubic-bezier(0.2, 0.9, 0.3, 1),
                 opacity 0.4s ease,
-                padding 0.55s cubic-bezier(0.2, 0.9, 0.3, 1);
-    padding-top: 0;
-    padding-bottom: 0;
+                padding 0.6s cubic-bezier(0.2, 0.9, 0.3, 1);
   }
   .routine-panel::-webkit-scrollbar { display: none; }
 
+  /* Bubbly top highlight (shine arc) — matches main card */
+  .routine-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 35%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 100%);
+    border-radius: 32px 32px 100% 100% / 32px 32px 50% 50%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease 0.3s;
+  }
+
   .routine-panel.open {
-    max-height: 100%;
+    max-height: calc(100% - 76px);
     opacity: 1;
     pointer-events: auto;
-    padding-top: 22px;
-    padding-bottom: 18px;
+    padding: 24px 24px 20px;
+  }
+  .routine-panel.open::before {
+    opacity: 0.55;
   }
 
   .routine-panel-header {
@@ -730,18 +746,18 @@
   </div>
 
   <div class="card">
+    <!-- Routine slide-down panel (positioned over the left column inside the card) -->
+    <div class="routine-panel" id="routinePanel">
+      <div class="routine-panel-header">
+        <div class="routine-panel-title" id="routinePanelTitle">Morning Routine</div>
+        <button class="routine-panel-close" id="routinePanelClose" aria-label="Close">✕</button>
+      </div>
+      <div id="routinePanelBody"></div>
+    </div>
+
     <!-- LEFT -->
     <aside class="left">
       <button class="routine-btn" id="routineBtn">Morning Routine</button>
-
-      <!-- Routine slide-down panel (lives inside .left, covers it when open) -->
-      <div class="routine-panel" id="routinePanel">
-        <div class="routine-panel-header">
-          <div class="routine-panel-title" id="routinePanelTitle">Morning Routine</div>
-          <button class="routine-panel-close" id="routinePanelClose" aria-label="Close">✕</button>
-        </div>
-        <div id="routinePanelBody"></div>
-      </div>
 
       <div>
         <div class="section-title">My Priorities</div>
