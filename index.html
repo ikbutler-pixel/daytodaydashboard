@@ -159,7 +159,204 @@
   }
 
   /* === LEFT SIDEBAR === */
-  .left { display: flex; flex-direction: column; gap: 24px; position: relative; }
+  .left {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    position: relative;
+  }
+
+  /* === ROUTINE SLIDE-DOWN PANEL === */
+  .routine-panel {
+    position: absolute;
+    top: 0;
+    left: -8px;
+    right: -8px;
+    bottom: 0;
+    background: linear-gradient(180deg,
+      rgba(20, 50, 110, 0.92) 0%,
+      rgba(15, 35, 80, 0.95) 100%);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 24px;
+    padding: 22px 22px 18px;
+    z-index: 20;
+    overflow-y: auto;
+    scrollbar-width: none;
+    box-shadow:
+      0 20px 60px rgba(0, 10, 30, 0.5),
+      0 0 0 1px rgba(255,255,255,0.1) inset,
+      0 2px 20px rgba(255,255,255,0.1) inset;
+
+    /* Unroll animation */
+    transform-origin: top center;
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 0.55s cubic-bezier(0.2, 0.9, 0.3, 1),
+                opacity 0.4s ease,
+                padding 0.55s cubic-bezier(0.2, 0.9, 0.3, 1);
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .routine-panel::-webkit-scrollbar { display: none; }
+
+  .routine-panel.open {
+    max-height: 100%;
+    opacity: 1;
+    pointer-events: auto;
+    padding-top: 22px;
+    padding-bottom: 18px;
+  }
+
+  .routine-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  }
+  .routine-panel-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 22px;
+    font-weight: 500;
+    color: #ffffff;
+    letter-spacing: 0.3px;
+  }
+  .routine-panel-close {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+  }
+  .routine-panel-close:hover {
+    background: rgba(255, 255, 255, 0.22);
+    transform: rotate(90deg);
+  }
+
+  /* Checklist items */
+  .checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.3s ease;
+  }
+  .checklist li.sub {
+    padding-left: 26px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .check-box {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+    transition: all 0.25s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .checklist li.sub .check-box {
+    width: 14px;
+    height: 14px;
+    border-radius: 5px;
+  }
+  .checklist li:hover .check-box {
+    border-color: rgba(255, 216, 154, 0.8);
+    background: rgba(255, 216, 154, 0.1);
+  }
+  .check-box::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: #ffd89a;
+    box-shadow: 0 0 8px #ffd89a;
+    transform: scale(0);
+    transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  }
+  .checklist li.sub .check-box::after {
+    width: 6px;
+    height: 6px;
+  }
+  .checklist li.checked .check-box {
+    border-color: #ffd89a;
+    background: rgba(255, 216, 154, 0.15);
+  }
+  .checklist li.checked .check-box::after {
+    transform: scale(1);
+  }
+  .check-label {
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    color: #eaf2ff;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+    line-height: 1.4;
+    transition: opacity 0.3s ease, color 0.3s ease;
+  }
+  .checklist li.sub .check-label {
+    font-size: 13px;
+    color: #c8d4ec;
+  }
+  .checklist li.checked .check-label {
+    text-decoration: line-through;
+    text-decoration-color: rgba(255, 216, 154, 0.6);
+    opacity: 0.5;
+  }
+
+  /* Daily check-in (no checkboxes, static questions) */
+  .checkin-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .checkin-list li {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 15px;
+    color: #eaf2ff;
+    line-height: 1.5;
+    padding: 9px 0 9px 16px;
+    position: relative;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .checkin-list li:last-child { border-bottom: none; }
+  .checkin-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 18px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ffd89a;
+    box-shadow: 0 0 8px #ffd89a;
+  }
 
   .routine-btn {
     display: inline-flex;
@@ -537,6 +734,15 @@
     <aside class="left">
       <button class="routine-btn" id="routineBtn">Morning Routine</button>
 
+      <!-- Routine slide-down panel (lives inside .left, covers it when open) -->
+      <div class="routine-panel" id="routinePanel">
+        <div class="routine-panel-header">
+          <div class="routine-panel-title" id="routinePanelTitle">Morning Routine</div>
+          <button class="routine-panel-close" id="routinePanelClose" aria-label="Close">✕</button>
+        </div>
+        <div id="routinePanelBody"></div>
+      </div>
+
       <div>
         <div class="section-title">My Priorities</div>
         <ul class="priorities">
@@ -632,26 +838,148 @@
   </div>
 
 <script>
-  // Time-based greeting + routine label
-  const hour = new Date().getHours();
-  const greetingEl = document.getElementById('greeting');
-  const routineBtn = document.getElementById('routineBtn');
+  // === ROUTINE SYSTEM ===
+  const ROUTINES = {
+    morning: {
+      title: 'Morning Routine',
+      type: 'checklist',
+      items: [
+        { text: 'Wake Up' },
+        { text: 'Make Your Bed' },
+        { text: 'Oral Hygiene', subs: ['Tongue Scrape', 'Brush Teeth', 'Floss'] },
+        { text: 'Rinse face' },
+        { text: 'Wash Face' },
+        { text: 'Iron Clothes If Needed' },
+        { text: 'Shower' },
+        { text: 'Deodorant' },
+        { text: 'Change Clothes' },
+        { text: 'Face Moisturizer and Body Lotion' },
+        { text: 'Chapstick' },
+        { text: 'Style Hair' },
+      ]
+    },
+    checkin: {
+      title: 'Daily Check-In',
+      type: 'questions',
+      items: [
+        'Did you look at the important dates coming up?',
+        'Did you check your reminders and tasks?',
+        'Did you look at canvas?',
+        'Did you check your notifications?',
+        'Maybe look at your email',
+        'Find something to do',
+      ]
+    },
+    night: {
+      title: 'Night Routine',
+      type: 'checklist',
+      items: [
+        { text: 'Rinse Face' },
+        { text: 'Shave' },
+        { text: 'Oral Hygiene', subs: ['Tongue Scrape', 'Brush Teeth', 'Floss'] },
+        { text: 'Rinse face' },
+        { text: 'Wash Face' },
+        { text: 'Shower' },
+        { text: 'Change Clothes' },
+        { text: 'Exfoliate' },
+        { text: 'Face Moisturizer' },
+        { text: 'Chapstick' },
+        { text: 'Prepare & Style Hair' },
+      ]
+    }
+  };
 
-  if (hour < 12) {
-    greetingEl.textContent = 'Good morning';
-    routineBtn.textContent = 'Morning Routine';
-  } else if (hour < 18) {
-    greetingEl.textContent = 'Good afternoon';
-    routineBtn.textContent = 'Daily Check-in';
-  } else {
-    greetingEl.textContent = 'Good evening';
-    routineBtn.textContent = 'Night Routine';
+  function getCurrentRoutineKey() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'morning';
+    if (hour < 18) return 'checkin';
+    return 'night';
   }
 
-  // Date
+  function applyTimeOfDay() {
+    const hour = new Date().getHours();
+    const greetingEl = document.getElementById('greeting');
+    const routineBtn = document.getElementById('routineBtn');
+    const key = getCurrentRoutineKey();
+
+    if (hour < 12) {
+      greetingEl.textContent = 'Good morning';
+    } else if (hour < 18) {
+      greetingEl.textContent = 'Good afternoon';
+    } else {
+      greetingEl.textContent = 'Good evening';
+    }
+    routineBtn.textContent = ROUTINES[key].title;
+  }
+
+  // Date label
   const dateOpts = { weekday: 'long', month: 'long', day: 'numeric' };
   document.getElementById('dateLabel').textContent =
     'It is ' + new Date().toLocaleDateString('en-US', dateOpts);
+
+  applyTimeOfDay();
+
+  // Auto-reload when the time bucket changes (e.g., 11:59 -> 12:00 = morning -> checkin)
+  let lastBucket = getCurrentRoutineKey();
+  setInterval(() => {
+    const now = getCurrentRoutineKey();
+    if (now !== lastBucket) {
+      // Time bucket changed; reload to refresh greeting + button + routine panel content
+      location.reload();
+    }
+  }, 60000);
+
+  // === ROUTINE PANEL OPEN/CLOSE ===
+  const routineBtn = document.getElementById('routineBtn');
+  const routinePanel = document.getElementById('routinePanel');
+  const routinePanelTitle = document.getElementById('routinePanelTitle');
+  const routinePanelBody = document.getElementById('routinePanelBody');
+  const routinePanelClose = document.getElementById('routinePanelClose');
+
+  function buildRoutineContent(key) {
+    const routine = ROUTINES[key];
+    routinePanelTitle.textContent = routine.title;
+
+    if (routine.type === 'questions') {
+      // Daily check-in: static text questions
+      let html = '<ul class="checkin-list">';
+      routine.items.forEach(q => {
+        html += `<li>${q}</li>`;
+      });
+      html += '</ul>';
+      routinePanelBody.innerHTML = html;
+    } else {
+      // Morning/night: interactive checklist
+      let html = '<ul class="checklist">';
+      routine.items.forEach(item => {
+        html += `<li><div class="check-box"></div><div class="check-label">${item.text}</div></li>`;
+        if (item.subs) {
+          item.subs.forEach(sub => {
+            html += `<li class="sub"><div class="check-box"></div><div class="check-label">${sub}</div></li>`;
+          });
+        }
+      });
+      html += '</ul>';
+      routinePanelBody.innerHTML = html;
+
+      // Wire up checkbox toggles (no persistence — fresh each session)
+      routinePanelBody.querySelectorAll('.checklist li').forEach(li => {
+        li.addEventListener('click', () => {
+          li.classList.toggle('checked');
+        });
+      });
+    }
+  }
+
+  routineBtn.addEventListener('click', () => {
+    const key = getCurrentRoutineKey();
+    buildRoutineContent(key);
+    routinePanel.classList.add('open');
+  });
+
+  routinePanelClose.addEventListener('click', () => {
+    routinePanel.classList.remove('open');
+  });
 
   // === GOOGLE CALENDAR INTEGRATION (v9) ===
   const CLIENT_ID = '459626170607-1a9dreqb6dmb4jvegc01q6sq3jcb9pfc.apps.googleusercontent.com';
