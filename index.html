@@ -405,6 +405,158 @@
     box-shadow: 0 0 12px #ffd89a, 0 0 4px #fff;
   }
 
+  /* Button row container */
+  .top-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tasks-btn::before {
+    background: #9fc6e7;
+    box-shadow: 0 0 12px #9fc6e7, 0 0 4px #fff;
+  }
+
+  /* Tasks panel — same position as routine panel; only one opens at a time */
+  .tasks-panel #tasksPanelBody {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 60px);
+    min-height: 200px;
+  }
+
+  /* Tasks list */
+  .tasks-list-container {
+    max-height: calc(100% - 80px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    margin-bottom: 12px;
+  }
+  .tasks-list-container::-webkit-scrollbar { display: none; }
+  .tasks-list { list-style: none; padding: 0; margin: 0; }
+  .tasks-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: opacity 0.4s ease;
+  }
+  .tasks-list li:last-child { border-bottom: none; }
+  .tasks-list li.removing { opacity: 0; }
+  .tasks-list li.overdue .task-body { color: #ffb8a8; }
+  .tasks-list li.overdue .task-date::before {
+    content: '⚠ ';
+    color: #ff9b80;
+  }
+  .tasks-list .task-check {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .tasks-list .task-check:hover {
+    border-color: rgba(159, 198, 231, 0.85);
+    background: rgba(159, 198, 231, 0.12);
+    transform: scale(1.08);
+  }
+  .tasks-list .task-check::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: #9fc6e7;
+    box-shadow: 0 0 8px #9fc6e7;
+    transform: scale(0);
+    transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  }
+  .tasks-list .task-check.checked::after {
+    transform: scale(1);
+  }
+  .task-body {
+    flex: 1;
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    color: #eaf2ff;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+  .task-date {
+    display: block;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 11px;
+    color: #9fc6e7;
+    margin-top: 2px;
+  }
+  .task-time {
+    display: inline;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 12px;
+    color: #9fc6e7;
+    margin-left: 6px;
+  }
+
+  /* Add task row */
+  .task-add-row {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .task-input {
+    flex: 1;
+    background: rgba(10, 25, 55, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px;
+    padding: 8px 14px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    color: #ffffff;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .task-input::placeholder {
+    color: rgba(234, 242, 255, 0.4);
+  }
+  .task-input:focus {
+    border-color: rgba(159, 198, 231, 0.7);
+  }
+  .task-add-btn {
+    background: rgba(159, 198, 231, 0.18);
+    border: 1px solid rgba(159, 198, 231, 0.5);
+    color: #9fc6e7;
+    width: 36px;
+    border-radius: 12px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 20px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    line-height: 1;
+  }
+  .task-add-btn:hover {
+    background: rgba(159, 198, 231, 0.32);
+    transform: translateY(-1px);
+  }
+
+  .tasks-loading {
+    justify-content: center;
+    font-style: italic;
+    opacity: 0.6;
+    color: #c8d4ec;
+    border: none !important;
+  }
+
   .section-title {
     font-family: 'Cormorant Garamond', serif;
     font-size: 22px;
@@ -1081,9 +1233,31 @@
       <div id="routinePanelBody"></div>
     </div>
 
+    <!-- Tasks slide-down panel -->
+    <div class="routine-panel tasks-panel" id="tasksPanel">
+      <div class="routine-panel-header">
+        <div class="routine-panel-title">Tasks</div>
+        <button class="routine-panel-close" id="tasksPanelClose" aria-label="Close">✕</button>
+      </div>
+      <div id="tasksPanelBody">
+        <div class="tasks-list-container">
+          <ul class="tasks-list" id="tasksList">
+            <li class="tasks-loading">Loading…</li>
+          </ul>
+        </div>
+        <div class="task-add-row">
+          <input type="text" class="task-input" id="taskInput" placeholder="Add a task…" />
+          <button class="task-add-btn" id="taskAddBtn">+</button>
+        </div>
+      </div>
+    </div>
+
     <!-- LEFT -->
     <aside class="left">
-      <button class="routine-btn" id="routineBtn">Morning Routine</button>
+      <div class="top-buttons">
+        <button class="routine-btn" id="routineBtn">Morning Routine</button>
+        <button class="routine-btn tasks-btn" id="tasksBtn">Tasks</button>
+      </div>
 
       <div>
         <div class="section-title">My Priorities</div>
@@ -1499,6 +1673,7 @@
       const calendars = (calListResp.result.items || []).filter(c => {
         if (c.hidden) return false;
         if (c.id && c.id.includes('#holiday@')) return false;
+        if (c.id === TASKS_CALENDAR_ID) return false;
         return true;
       });
 
@@ -1660,6 +1835,173 @@
     renderImportantDates(allStarredEvents);
   });
 
+  // === TASKS SYSTEM ===
+  const TASKS_CALENDAR_ID = 'f7e28cb40eb0badd72332cd685b4f1031f721cfd7a038b69fc64ed6181bf46e4@group.calendar.google.com';
+
+  const tasksBtn = document.getElementById('tasksBtn');
+  const tasksPanel = document.getElementById('tasksPanel');
+  const tasksPanelClose = document.getElementById('tasksPanelClose');
+  const tasksListEl = document.getElementById('tasksList');
+  const taskInput = document.getElementById('taskInput');
+  const taskAddBtn = document.getElementById('taskAddBtn');
+
+  let tasksLoaded = false;
+
+  async function loadTasks() {
+    if (!gapi.client.getToken()) {
+      tasksListEl.innerHTML = '<li class="tasks-loading">Sign in to load tasks</li>';
+      return;
+    }
+    try {
+      // Fetch from 30 days ago through end of today to catch overdue tasks
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+
+      const resp = await gapi.client.calendar.events.list({
+        calendarId: TASKS_CALENDAR_ID,
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        showDeleted: false,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 100,
+      });
+
+      const tasks = resp.result.items || [];
+      renderTasks(tasks);
+      tasksLoaded = true;
+    } catch (err) {
+      console.error('Failed to load tasks', err);
+      tasksListEl.innerHTML = '<li class="tasks-loading">Could not load tasks</li>';
+    }
+  }
+
+  function renderTasks(tasks) {
+    if (tasks.length === 0) {
+      tasksListEl.innerHTML = '<li class="tasks-loading">No tasks — you\u2019re clear 🎉</li>';
+      return;
+    }
+
+    // Sort: overdue first (oldest first), then today's (by time if any)
+    const today = ymd(new Date());
+    tasks.sort((a, b) => {
+      const aDate = ymd(eventStartLocal(a));
+      const bDate = ymd(eventStartLocal(b));
+      return aDate.localeCompare(bDate);
+    });
+
+    tasksListEl.innerHTML = '';
+    tasks.forEach(t => {
+      const taskDate = ymd(eventStartLocal(t));
+      const isOverdue = taskDate < today;
+      const title = (t.summary || '(untitled)').trim();
+      const li = document.createElement('li');
+      li.dataset.eventId = t.id;
+      if (isOverdue) li.classList.add('overdue');
+
+      const check = document.createElement('div');
+      check.className = 'task-check';
+      check.title = 'Mark done (deletes from calendar)';
+
+      const body = document.createElement('div');
+      body.className = 'task-body';
+
+      // Time (if timed) or overdue date label
+      let metaHtml = '';
+      if (t.start.dateTime) {
+        const timeStr = new Date(t.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        metaHtml = `<span class="task-time">${timeStr}</span>`;
+      }
+      if (isOverdue) {
+        const d = eventStartLocal(t);
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        metaHtml += `<span class="task-date">from ${months[d.getMonth()]} ${d.getDate()}</span>`;
+      }
+      body.innerHTML = escapeHtml(title) + metaHtml;
+
+      check.addEventListener('click', async () => {
+        check.classList.add('checked');
+        li.classList.add('removing');
+        // Delete the event from the calendar
+        try {
+          await gapi.client.calendar.events.delete({
+            calendarId: TASKS_CALENDAR_ID,
+            eventId: t.id,
+          });
+        } catch (err) {
+          console.error('Failed to delete task', err);
+        }
+        setTimeout(() => {
+          li.remove();
+          if (tasksListEl.children.length === 0) {
+            tasksListEl.innerHTML = '<li class="tasks-loading">No tasks — you\u2019re clear 🎉</li>';
+          }
+        }, 400);
+      });
+
+      li.appendChild(check);
+      li.appendChild(body);
+      tasksListEl.appendChild(li);
+    });
+  }
+
+  async function addTask(text) {
+    if (!text.trim()) return;
+    if (!gapi.client.getToken()) return;
+    try {
+      // Create as all-day event for today
+      const today = new Date();
+      const todayStr = ymd(today);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = ymd(tomorrow);
+
+      await gapi.client.calendar.events.insert({
+        calendarId: TASKS_CALENDAR_ID,
+        resource: {
+          summary: text.trim(),
+          start: { date: todayStr },
+          end: { date: tomorrowStr },
+        },
+      });
+      // Refresh the tasks list
+      loadTasks();
+    } catch (err) {
+      console.error('Failed to add task', err);
+    }
+  }
+
+  tasksBtn.addEventListener('click', () => {
+    // Close routine panel if open
+    routinePanel.classList.remove('open');
+    // Open tasks panel
+    tasksPanel.classList.add('open');
+    if (!tasksLoaded) loadTasks();
+    else loadTasks(); // refresh every time you open
+  });
+
+  tasksPanelClose.addEventListener('click', () => {
+    tasksPanel.classList.remove('open');
+  });
+
+  taskAddBtn.addEventListener('click', () => {
+    const val = taskInput.value.trim();
+    if (!val) return;
+    addTask(val);
+    taskInput.value = '';
+  });
+  taskInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') taskAddBtn.click();
+  });
+
+  // Also make the routine button close tasks panel
+  routineBtn.addEventListener('click', () => {
+    tasksPanel.classList.remove('open');
+  }, true);
+
   // Important dates load is triggered from inside loadEvents() (see calendar section).
 
   // === GOOGLE CALENDAR INTEGRATION (v9) ===
@@ -1807,6 +2149,7 @@
       const calendars = (calListResp.result.items || []).filter(c => {
         if (c.hidden) return false;
         if (c.id && c.id.includes('#holiday@')) return false;
+        if (c.id === TASKS_CALENDAR_ID) return false; // Tasks live in their own panel
         return true;
       });
 
