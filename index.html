@@ -684,7 +684,10 @@
     border-left: 2px solid #ffd89a;
     border-radius: 6px;
     box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset;
+    min-height: 90px;
+    transition: opacity 0.5s ease;
   }
+  .quote-box.fading { opacity: 0; }
   .quote-box p {
     font-family: 'Cormorant Garamond', serif;
     font-size: 15px;
@@ -692,6 +695,7 @@
     font-style: italic;
     line-height: 1.5;
     font-weight: 400;
+    transition: font-size 0.3s ease;
   }
   .quote-box .author {
     font-family: 'Manrope', sans-serif;
@@ -733,6 +737,232 @@
       border-radius: 32px;
     }
     .greeting { font-size: 34px; }
+    /* Hide motivation section entirely on phones / iPad portrait */
+    .motivation-section { display: none !important; }
+  }
+
+  /* === SETTINGS MODAL === */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 15, 35, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal {
+    width: min(520px, 92vw);
+    max-height: 85vh;
+    background: linear-gradient(135deg,
+      rgba(30, 70, 140, 0.55) 0%,
+      rgba(15, 40, 95, 0.65) 100%);
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    border-radius: 32px;
+    padding: 32px 32px 28px;
+    color: #eaf2ff;
+    overflow-y: auto;
+    scrollbar-width: none;
+    box-shadow:
+      0 40px 100px rgba(0, 10, 30, 0.6),
+      0 20px 60px rgba(50, 120, 200, 0.25),
+      0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+      0 2px 30px rgba(255, 255, 255, 0.12) inset;
+    transform: scale(0.94);
+    transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+    position: relative;
+  }
+  .modal::-webkit-scrollbar { display: none; }
+  .modal::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 35%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 100%);
+    border-radius: 32px 32px 100% 100% / 32px 32px 50% 50%;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  .modal-overlay.open .modal { transform: scale(1); }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 22px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+    position: relative;
+  }
+  .modal-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 26px;
+    font-weight: 500;
+    color: #ffffff;
+  }
+  .modal-close {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+  }
+  .modal-close:hover {
+    background: rgba(255, 255, 255, 0.22);
+    transform: rotate(90deg);
+  }
+
+  .modal-section {
+    margin-bottom: 26px;
+    position: relative;
+  }
+  .modal-section:last-child { margin-bottom: 0; }
+  .modal-section-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    color: #ffd89a;
+    margin-bottom: 12px;
+  }
+
+  .quotes-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 14px 0;
+    max-height: 240px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .quotes-list::-webkit-scrollbar { display: none; }
+  .quotes-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(10, 25, 55, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    margin-bottom: 8px;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #eaf2ff;
+  }
+  .quotes-list .quote-text { flex: 1; }
+  .quotes-list .quote-delete {
+    background: rgba(255, 100, 100, 0.15);
+    border: 1px solid rgba(255, 130, 130, 0.4);
+    color: #ffb8b8;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    font-family: 'Manrope', sans-serif;
+  }
+  .quotes-list .quote-delete:hover {
+    background: rgba(255, 100, 100, 0.3);
+    transform: scale(1.1);
+  }
+
+  .quote-add-row {
+    display: flex;
+    gap: 8px;
+  }
+  .quote-input {
+    flex: 1;
+    background: rgba(10, 25, 55, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 14px;
+    color: #ffffff;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .quote-input::placeholder {
+    color: rgba(234, 242, 255, 0.4);
+  }
+  .quote-input:focus {
+    border-color: rgba(255, 216, 154, 0.6);
+  }
+  .quote-add-btn {
+    background: rgba(255, 216, 154, 0.18);
+    border: 1px solid rgba(255, 216, 154, 0.5);
+    color: #ffd89a;
+    padding: 0 16px;
+    border-radius: 12px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .quote-add-btn:hover {
+    background: rgba(255, 216, 154, 0.28);
+    transform: translateY(-1px);
+  }
+
+  .modal-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: rgba(10, 25, 55, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 14px;
+    color: #eaf2ff;
+    text-decoration: none;
+    font-family: 'Manrope', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.25s ease;
+  }
+  .modal-link:hover {
+    background: rgba(10, 25, 55, 0.6);
+    border-color: rgba(255, 216, 154, 0.5);
+    color: #ffd89a;
+    transform: translateY(-1px);
+  }
+  .modal-link::before {
+    content: '↗';
+    font-size: 16px;
+    color: #ffd89a;
   }
 </style>
 </head>
@@ -741,8 +971,32 @@
   <div class="sun-glow"></div>
   <div class="window-frame"></div>
 
-  <div class="menu">
+  <div class="menu" id="hamburgerBtn">
     <span></span><span></span><span></span>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal" id="settingsModalContent">
+      <div class="modal-header">
+        <div class="modal-title">Settings</div>
+        <button class="modal-close" id="modalCloseBtn" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">Motivational Quotes</div>
+        <ul class="quotes-list" id="quotesList"></ul>
+        <div class="quote-add-row">
+          <input type="text" class="quote-input" id="quoteInput" placeholder="Add a new quote…" />
+          <button class="quote-add-btn" id="quoteAddBtn">Add</button>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">Quick Links</div>
+        <a href="https://www.notion.so/2fbb0b21d6f9803ab6c1f390fbb47310" target="_blank" class="modal-link">Notion Planner</a>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -821,9 +1075,9 @@
 
     <!-- RIGHT -->
     <aside class="right">
-      <div>
+      <div class="motivation-section">
         <div class="section-title">Motivation</div>
-        <div class="quote-box">
+        <div class="quote-box" id="quoteBox">
           <p id="quoteText">"The best time to plant a tree was 20 years ago. The second best time is now."</p>
           <div class="author" id="quoteAuthor">— Chinese Proverb</div>
         </div>
@@ -831,23 +1085,8 @@
 
       <div>
         <div class="section-title">Important Dates</div>
-        <ul class="dates-list">
-          <li>
-            <span class="date">APR 16</span>
-            UCSD Summer Session 2 Registration
-          </li>
-          <li>
-            <span class="date">APR 16</span>
-            Ascend Info Session
-          </li>
-          <li>
-            <span class="date">APR 16</span>
-            The Basement: Founder to Leader Workshop
-          </li>
-          <li>
-            <span class="date">APR 21</span>
-            SBVC Registration for CC Courses
-          </li>
+        <ul class="dates-list" id="datesList">
+          <li class="dates-loading">Loading…</li>
         </ul>
       </div>
     </aside>
@@ -996,6 +1235,249 @@
   routinePanelClose.addEventListener('click', () => {
     routinePanel.classList.remove('open');
   });
+
+  // === MOTIVATIONAL QUOTES SYSTEM ===
+  const QUOTES_KEY = 'motivational_quotes_v1';
+  const DEFAULT_QUOTES = [
+    '"Recruit the finest scholars and students; use the world as your laboratory; and, above all, do what is important." — Roger Revelle',
+    '"The smartest people in the world know where to get help" — Random Redditor',
+    'Stay curious about everything. Ask questions even if they might feel stupid. Attend events, even if you don\u2019t feel like it.',
+    'Be the person you want to be in the future.',
+    'Make whatever you decide the right decision.',
+  ];
+
+  function loadQuotes() {
+    try {
+      const saved = localStorage.getItem(QUOTES_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    // First time or invalid - seed defaults
+    saveQuotes(DEFAULT_QUOTES);
+    return [...DEFAULT_QUOTES];
+  }
+  function saveQuotes(arr) {
+    try { localStorage.setItem(QUOTES_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+
+  let quotes = loadQuotes();
+  let currentQuoteIndex = 0;
+  const quoteBox = document.getElementById('quoteBox');
+  const quoteText = document.getElementById('quoteText');
+  const quoteAuthor = document.getElementById('quoteAuthor');
+
+  function parseQuote(raw) {
+    // Split on " — " or " - " to extract author if present
+    const match = raw.match(/^(.+?)\s+[—-]\s+(.+)$/);
+    if (match) return { text: match[1].trim(), author: '— ' + match[2].trim() };
+    return { text: raw.trim(), author: '' };
+  }
+
+  function fitQuoteText() {
+    // Auto-shrink font if quote overflows the box
+    if (!quoteText) return;
+    let size = 15;
+    quoteText.style.fontSize = size + 'px';
+    // Wait a tick for layout
+    requestAnimationFrame(() => {
+      while (quoteBox.scrollHeight > 200 && size > 11) {
+        size -= 0.5;
+        quoteText.style.fontSize = size + 'px';
+      }
+    });
+  }
+
+  function displayQuote(index) {
+    if (quotes.length === 0) {
+      quoteText.textContent = 'No quotes yet — add some in settings.';
+      quoteAuthor.textContent = '';
+      return;
+    }
+    if (index >= quotes.length) index = 0;
+    if (index < 0) index = 0;
+    currentQuoteIndex = index;
+    const parsed = parseQuote(quotes[index]);
+    quoteBox.classList.add('fading');
+    setTimeout(() => {
+      quoteText.textContent = parsed.text;
+      quoteAuthor.textContent = parsed.author;
+      fitQuoteText();
+      quoteBox.classList.remove('fading');
+    }, 350);
+  }
+
+  function rotateQuote() {
+    if (quotes.length === 0) return;
+    let next = (currentQuoteIndex + 1) % quotes.length;
+    displayQuote(next);
+  }
+
+  // Initial display (without fade since it's the first one)
+  if (quotes.length > 0) {
+    const initial = parseQuote(quotes[0]);
+    quoteText.textContent = initial.text;
+    quoteAuthor.textContent = initial.author;
+    fitQuoteText();
+    currentQuoteIndex = 0;
+  }
+
+  // Rotate every 5 minutes
+  setInterval(rotateQuote, 5 * 60 * 1000);
+
+  // === SETTINGS MODAL ===
+  const hamburgerBtn = document.getElementById('hamburgerBtn');
+  const settingsModal = document.getElementById('settingsModal');
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+  const quotesListEl = document.getElementById('quotesList');
+  const quoteInput = document.getElementById('quoteInput');
+  const quoteAddBtn = document.getElementById('quoteAddBtn');
+
+  function renderQuotesList() {
+    if (quotes.length === 0) {
+      quotesListEl.innerHTML = '<li style="justify-content:center; color:rgba(234,242,255,0.5);">No quotes yet</li>';
+      return;
+    }
+    quotesListEl.innerHTML = '';
+    quotes.forEach((q, i) => {
+      const li = document.createElement('li');
+      const textDiv = document.createElement('div');
+      textDiv.className = 'quote-text';
+      textDiv.textContent = q;
+      const delBtn = document.createElement('button');
+      delBtn.className = 'quote-delete';
+      delBtn.textContent = '✕';
+      delBtn.setAttribute('aria-label', 'Delete quote');
+      delBtn.addEventListener('click', () => {
+        const wasShowing = (i === currentQuoteIndex);
+        quotes.splice(i, 1);
+        saveQuotes(quotes);
+        renderQuotesList();
+        if (wasShowing) {
+          // Replace currently-shown quote with another
+          if (quotes.length > 0) {
+            displayQuote(currentQuoteIndex >= quotes.length ? 0 : currentQuoteIndex);
+          } else {
+            quoteText.textContent = 'No quotes yet — add some in settings.';
+            quoteAuthor.textContent = '';
+          }
+        } else if (i < currentQuoteIndex) {
+          currentQuoteIndex--;
+        }
+      });
+      li.appendChild(textDiv);
+      li.appendChild(delBtn);
+      quotesListEl.appendChild(li);
+    });
+  }
+
+  function openSettings() {
+    renderQuotesList();
+    settingsModal.classList.add('open');
+  }
+  function closeSettings() {
+    settingsModal.classList.remove('open');
+  }
+
+  hamburgerBtn.addEventListener('click', openSettings);
+  modalCloseBtn.addEventListener('click', closeSettings);
+  // Click outside modal to close
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) closeSettings();
+  });
+  // Esc to close
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && settingsModal.classList.contains('open')) closeSettings();
+  });
+
+  quoteAddBtn.addEventListener('click', () => {
+    const val = quoteInput.value.trim();
+    if (!val) return;
+    quotes.push(val);
+    saveQuotes(quotes);
+    quoteInput.value = '';
+    renderQuotesList();
+    // If this is the first quote, show it immediately
+    if (quotes.length === 1) {
+      displayQuote(0);
+    }
+  });
+  quoteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') quoteAddBtn.click();
+  });
+
+  // === IMPORTANT DATES (auto-fetch from ⭐ events in next 31 days) ===
+  const datesListEl = document.getElementById('datesList');
+
+  async function loadImportantDates() {
+    if (!gapi.client.getToken()) {
+      datesListEl.innerHTML = '<li style="opacity:0.5;">Sign in to load dates</li>';
+      return;
+    }
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setDate(end.getDate() + 31);
+      end.setHours(23, 59, 59, 999);
+
+      const calListResp = await gapi.client.calendar.calendarList.list({ minAccessRole: 'reader' });
+      const calendars = (calListResp.result.items || []).filter(c => {
+        if (c.hidden) return false;
+        if (c.id && c.id.includes('#holiday@')) return false;
+        return true;
+      });
+
+      const fetchPromises = calendars.map(cal =>
+        gapi.client.calendar.events.list({
+          calendarId: cal.id,
+          timeMin: start.toISOString(),
+          timeMax: end.toISOString(),
+          showDeleted: false,
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 100,
+          q: '⭐',
+        }).then(r => (r.result.items || []).filter(e => (e.summary || '').includes('⭐')))
+          .catch(() => [])
+      );
+
+      const results = await Promise.all(fetchPromises);
+      const starred = results.flat();
+      starred.sort((a, b) => {
+        const aStart = a.start.dateTime || a.start.date;
+        const bStart = b.start.dateTime || b.start.date;
+        return new Date(aStart) - new Date(bStart);
+      });
+
+      renderImportantDates(starred);
+    } catch (err) {
+      console.error('Failed to load important dates', err);
+      datesListEl.innerHTML = '<li style="opacity:0.5;">Could not load dates</li>';
+    }
+  }
+
+  function renderImportantDates(events) {
+    if (events.length === 0) {
+      datesListEl.innerHTML = '<li style="opacity:0.6; font-style:italic;">No starred events in the next 31 days</li>';
+      return;
+    }
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    datesListEl.innerHTML = '';
+    events.forEach(e => {
+      const startRaw = e.start.dateTime || e.start.date;
+      const d = new Date(startRaw);
+      const dateLabel = `${months[d.getMonth()]} ${d.getDate()}`;
+      // Strip the ⭐ from title for display
+      const title = (e.summary || '').replace(/⭐\s*/g, '').trim();
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="date">${dateLabel}</span>${escapeHtml(title)}`;
+      datesListEl.appendChild(li);
+    });
+  }
+
+  // Important dates load is triggered from inside loadEvents() (see calendar section).
 
   // === GOOGLE CALENDAR INTEGRATION (v9) ===
   const CLIENT_ID = '459626170607-1a9dreqb6dmb4jvegc01q6sq3jcb9pfc.apps.googleusercontent.com';
@@ -1174,6 +1656,8 @@
       });
 
       renderEvents(allEvents);
+      // Also refresh the important dates sidebar
+      if (typeof loadImportantDates === 'function') loadImportantDates();
     } catch (err) {
       console.error(err);
       // Token might be expired/invalid - clear and show sign in
