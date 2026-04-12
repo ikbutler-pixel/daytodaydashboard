@@ -597,9 +597,9 @@
     letter-spacing: 0.3px;
     font-style: italic;
     text-shadow:
-      0 0 18px rgba(255, 255, 255, 0.5),
-      0 0 35px rgba(255, 216, 154, 0.3),
-      0 0 60px rgba(255, 216, 154, 0.15);
+      0 0 14px rgba(255, 255, 255, 0.4),
+      0 0 28px rgba(255, 216, 154, 0.2),
+      0 0 45px rgba(255, 216, 154, 0.1);
   }
 
   .priorities { list-style: none; }
@@ -621,9 +621,9 @@
     margin-right: 8px;
     font-weight: 600;
     text-shadow:
-      0 0 18px rgba(255, 216, 154, 0.9),
-      0 0 35px rgba(255, 216, 154, 0.45),
-      0 0 55px rgba(255, 216, 154, 0.2);
+      0 0 14px rgba(255, 216, 154, 0.7),
+      0 0 28px rgba(255, 216, 154, 0.35),
+      0 0 42px rgba(255, 216, 154, 0.15);
   }
 
   /* Hyperlinked section title (no underline) */
@@ -723,10 +723,9 @@
     margin-bottom: 4px;
     color: #ffffff;
     text-shadow:
-      0 0 25px rgba(255, 255, 255, 0.4),
-      0 0 50px rgba(255, 216, 154, 0.35),
-      0 0 90px rgba(100, 160, 220, 0.35),
-      0 2px 20px rgba(255, 255, 255, 0.2);
+      0 0 20px rgba(255, 255, 255, 0.3),
+      0 0 40px rgba(255, 216, 154, 0.25),
+      0 0 70px rgba(100, 160, 220, 0.25);
     opacity: 0;
     animation: fadeUp 1s ease 0.5s forwards;
   }
@@ -829,14 +828,14 @@
     font-size: 15px;
     font-weight: 500;
     color: #ffffff;
-    text-shadow: 0 0 16px rgba(255, 255, 255, 0.5), 0 0 30px rgba(255, 255, 255, 0.2);
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.35), 0 0 22px rgba(255, 255, 255, 0.15);
   }
   .event-time {
     font-size: 12px;
     color: #ffd89a;
     font-weight: 500;
     white-space: nowrap;
-    text-shadow: 0 0 14px rgba(255, 216, 154, 0.7), 0 0 25px rgba(255, 216, 154, 0.3);
+    text-shadow: 0 0 10px rgba(255, 216, 154, 0.55), 0 0 20px rgba(255, 216, 154, 0.2);
   }
   .event-desc {
     font-size: 12px;
@@ -929,12 +928,12 @@
     display: block;
     font-family: 'Cormorant Garamond', serif;
     font-style: italic;
-    font-size: 13px;
-    color: #ffd89a;
+    font-size: 14px;
+    color: #ffe4b0;
     font-weight: 600;
     margin-bottom: 3px;
     letter-spacing: 0.8px;
-    text-shadow: 0 0 16px rgba(255, 216, 154, 0.7), 0 0 30px rgba(255, 216, 154, 0.3);
+    text-shadow: 0 0 12px rgba(255, 216, 154, 0.5), 0 0 22px rgba(255, 216, 154, 0.2);
   }
   .dates-list .date-body { flex: 1; }
 
@@ -2285,10 +2284,21 @@
     return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  // Refresh when the tab becomes visible again
+  // Refresh when the tab becomes visible again + check token validity
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && gapiInited && gisInited && gapi.client.getToken()) {
-      loadEvents();
+    if (!document.hidden && gapiInited && gisInited) {
+      const token = gapi.client.getToken();
+      const savedExpiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
+      const now = Date.now();
+
+      if (token && savedExpiry > now + 30000) {
+        // Token still valid — just refresh events
+        loadEvents();
+      } else if (token || localStorage.getItem(TOKEN_KEY)) {
+        // Token expired or about to expire — try silent refresh (user already interacted before)
+        attemptSilentRefresh();
+      }
+      // If no token at all, sign-in button is already showing
     }
   });
 </script>
