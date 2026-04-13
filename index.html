@@ -432,10 +432,14 @@
   /* Button row container */
   .top-buttons {
     display: flex;
+    flex-direction: row;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     padding: 6px 2px 4px 2px;
     margin: -6px -2px -4px -2px;
+  }
+  .top-buttons .routine-btn {
+    flex-shrink: 0;
   }
   .tasks-btn::before {
     background: #9fc6e7;
@@ -936,6 +940,28 @@
     text-shadow: 0 0 12px rgba(255, 216, 154, 0.5), 0 0 22px rgba(255, 216, 154, 0.2);
   }
   .dates-list .date-body { flex: 1; }
+  .date-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 11px;
+    opacity: 0.75;
+    font-family: 'Manrope', sans-serif;
+  }
+  .date-days {
+    color: #ffd89a;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .date-time {
+    color: rgba(255,255,255,0.65);
+    font-weight: 400;
+  }
+  .date-meta::before {
+    content: '·';
+    color: rgba(255,255,255,0.3);
+  }
 
   /* Day-of checkbox (only visible when event is happening today) */
   .date-check {
@@ -1852,9 +1878,19 @@
       const li = document.createElement('li');
       li.dataset.eventId = e.id;
 
+      // Days left
+      const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+      const eventMid = new Date(d); eventMid.setHours(0,0,0,0);
+      const diffDays = Math.round((eventMid - todayMid) / 86400000);
+      const daysLabel = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : diffDays + 'd away';
+      // Time or TBD
+      const timeLabel = e.start.dateTime
+        ? new Date(e.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        : 'TBD';
+
       const body = document.createElement('div');
       body.className = 'date-body';
-      body.innerHTML = `<span class="date">${dateLabel}</span>${escapeHtml(title)}`;
+      body.innerHTML = `<span class="date">${dateLabel}</span>${escapeHtml(title)}<span class="date-meta"><span class="date-days">${daysLabel}</span><span class="date-time">${timeLabel}</span></span>`;
       li.appendChild(body);
 
       // Day-of checkbox: only appears if event is happening today
