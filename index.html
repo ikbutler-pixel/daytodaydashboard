@@ -1966,11 +1966,12 @@
       return;
     }
     try {
-      // Fetch from 30 days ago through end of today to catch overdue tasks
+      // Fetch from 30 days ago (overdue) through 31 days ahead (upcoming)
       const start = new Date();
       start.setDate(start.getDate() - 30);
       start.setHours(0, 0, 0, 0);
       const end = new Date();
+      end.setDate(end.getDate() + 31);
       end.setHours(23, 59, 59, 999);
 
       const resp = await gapi.client.calendar.events.list({
@@ -1998,18 +1999,21 @@
       return;
     }
 
-    // Sort: overdue first (oldest first), then today's (by time if any)
+    // Sort: overdue first (oldest first), then upcoming (soonest first)
     const today = ymd(new Date());
-    tasks.sort((a, b) => {
-      const aDate = ymd(eventStartLocal(a));
-      const bDate = ymd(eventStartLocal(b));
-      return aDate.localeCompare(bDate);
-    });
+    const overdue = tasks.filter(t => ymd(eventStartLocal(t)) < today);
+    const upcoming = tasks.filter(t => ymd(eventStartLocal(t)) >= today);
+    overdue.sort((a, b) => ymd(eventStartLocal(a)).localeCompare(ymd(eventStartLocal(b))));
+    upcoming.sort((a, b) => ymd(eventStartLocal(a)).localeCompare(ymd(eventStartLocal(b))));
+    const sorted = [...overdue, ...upcoming];
+
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     tasksListEl.innerHTML = '';
-    tasks.forEach(t => {
+    sorted.forEach(t => {
       const taskDate = ymd(eventStartLocal(t));
       const isOverdue = taskDate < today;
+      const isToday = taskDate === today;
       const title = (t.summary || '(untitled)').trim();
       const li = document.createElement('li');
       li.dataset.eventId = t.id;
@@ -2022,16 +2026,18 @@
       const body = document.createElement('div');
       body.className = 'task-body';
 
-      // Time (if timed) or overdue date label
+      // Date/time meta
       let metaHtml = '';
+      const d = eventStartLocal(t);
       if (t.start.dateTime) {
         const timeStr = new Date(t.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
         metaHtml = `<span class="task-time">${timeStr}</span>`;
       }
       if (isOverdue) {
-        const d = eventStartLocal(t);
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         metaHtml += `<span class="task-date">from ${months[d.getMonth()]} ${d.getDate()}</span>`;
+      } else if (!isToday) {
+        // Show due date for upcoming tasks
+        metaHtml += `<span class="task-date">${months[d.getMonth()]} ${d.getDate()}</span>`;
       }
       body.innerHTML = escapeHtml(title) + metaHtml;
 
