@@ -1908,10 +1908,32 @@
       const eventMid = new Date(d); eventMid.setHours(0,0,0,0);
       const diffDays = Math.round((eventMid - todayMid) / 86400000);
       const daysLabel = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : diffDays + 'd away';
-      // Time or TBD
-      const timeLabel = e.start.dateTime
-        ? new Date(e.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-        : 'TBD';
+      // Time range or TBD
+      let timeLabel;
+      if (e.start.dateTime) {
+        const fmt = (iso) => {
+          const dt = new Date(iso);
+          let h = dt.getHours();
+          const m = dt.getMinutes();
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          h = h % 12 || 12;
+          return m === 0 ? `${h} ${ampm}` : `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+        };
+        const startStr = fmt(e.start.dateTime);
+        const endStr = (e.end && e.end.dateTime) ? fmt(e.end.dateTime) : null;
+        if (endStr) {
+          const startAmPm = startStr.slice(-2);
+          const endAmPm = endStr.slice(-2);
+          // Collapse "4 PM – 5:30 PM" to "4 – 5:30 PM" when AM/PM matches
+          timeLabel = (startAmPm === endAmPm)
+            ? `${startStr.slice(0, -3)} – ${endStr}`
+            : `${startStr} – ${endStr}`;
+        } else {
+          timeLabel = startStr;
+        }
+      } else {
+        timeLabel = 'TBD';
+      }
 
       const body = document.createElement('div');
       body.className = 'date-body';
