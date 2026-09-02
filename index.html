@@ -118,6 +118,16 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 .tmr-n{font-size:12px;}
 .tmr-h{font-size:11px;color:var(--text-3);white-space:nowrap;}
 
+.allday{font-size:12px;color:var(--text-2);background:var(--panel);border-radius:var(--radius);padding:4px 8px;margin-bottom:6px;}
+#splash{padding:28px 0;}
+.err{max-width:520px;}
+.err-h{font-size:15px;margin-bottom:4px;}
+.err-b{font-size:13px;color:var(--text-2);margin-bottom:12px;line-height:1.5;}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:200;max-width:520px;
+  background:#37352f;color:#fff;font-size:13px;line-height:1.45;padding:9px 14px;border-radius:6px;
+  box-shadow:0 6px 20px rgba(15,15,15,0.25);}
+#toast[hidden]{display:none;}
+#busy{font-size:11px;color:var(--text-3);opacity:0;transition:opacity .15s;align-self:center;}
 .ovl{position:fixed;inset:0;background:rgba(15,15,15,0.4);z-index:100;display:flex;align-items:flex-start;
   justify-content:center;padding:36px 20px;overflow-y:auto;}
 .ovl[hidden]{display:none;}
@@ -153,12 +163,17 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 <body>
 <div class="wrap">
 
+<div id="splash"></div>
+
+<div id="stage" hidden>
+
   <div class="hdr">
     <div>
       <div class="hdr-date" id="hdrDate">—</div>
       <div class="hdr-sub" id="hdrSub"></div>
     </div>
     <div class="navrow">
+      <span id="busy">saving…</span>
       <button class="btn-icon" id="prevDay" aria-label="Previous day">‹</button>
       <button id="todayBtn">Today</button>
       <button class="btn-icon" id="nextDay" aria-label="Next day">›</button>
@@ -173,6 +188,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 
     <div>
       <div class="colh"><span>Schedule</span></div>
+      <div id="allday"></div>
       <div class="sched" id="sched"></div>
     </div>
 
@@ -191,7 +207,11 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
     </div>
 
   </div>
+
 </div>
+</div>
+
+<div id="toast" hidden></div>
 
 <div class="ovl" id="tmOvl" hidden>
   <div class="modal" role="dialog" aria-label="Task manager">
@@ -213,116 +233,132 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 
 <script>
 /* ---------- date helpers ---------- */
-const MS = 86400000;
-function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+const MS=86400000;
+function pad(n){return String(n).padStart(2,"0");}
+function isoOf(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 function parse(s){const p=s.split("-");return new Date(+p[0],+p[1]-1,+p[2]);}
-function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return iso(d);}
+function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return isoOf(d);}
 function diffDays(a,b){return Math.round((parse(a)-parse(b))/MS);}
-function startOfWeek(s){const d=parse(s);const off=(d.getDay()+6)%7;d.setDate(d.getDate()-off);return iso(d);}
+function startOfWeek(s){const d=parse(s);const off=(d.getDay()+6)%7;d.setDate(d.getDate()-off);return isoOf(d);}
 const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function longDate(s){const d=parse(s);return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()]+", "+MON[d.getMonth()]+" "+d.getDate();}
 function shortDate(s){const d=parse(s);return DOW[d.getDay()]+", "+MONS[d.getMonth()]+" "+d.getDate();}
 function mins(t){const p=t.split(":");return +p[0]*60+ +p[1];}
-function fmtTime(t){let[h,m]=t.split(":").map(Number);const ap=h>=12?"pm":"am";h=h%12;if(h===0)h=12;return m===0?h+":00 "+ap:h+":"+String(m).padStart(2,"0")+" "+ap;}
-function fmtShort(t){let[h,m]=t.split(":").map(Number);h=h%12;if(h===0)h=12;return h+":"+String(m).padStart(2,"0");}
+function fmtShort(t){let[h,m]=t.split(":").map(Number);h=h%12;if(h===0)h=12;return h+":"+pad(m);}
 function fmtHour(h){const ap=h>=12?"pm":"am";let x=h%12;if(x===0)x=12;return x+" "+ap;}
 function dur(m){const h=Math.floor(m/60),r=m%60;if(h&&r)return h+" hr "+r+" min";if(h)return h+" hr";return r+" min";}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
-/* ---------- fake data: calendar ---------- */
-/* type mirrors the Notion Calendar database: Class, Event, Due Date, Routine, Office Hours, Productivity */
-const REAL_TODAY=iso(new Date());
-const CAL=[];
-let _cid=1;
-function ev(off,title,start,end,type){
-  CAL.push({id:"c"+(_cid++),date:addDays(REAL_TODAY,off),title,start,end,type});
+/* Notion hands back timestamps with an offset. Converting here, with the
+   device's own clock, is what keeps a 9:30pm wind-down on tonight rather than
+   tomorrow morning in UTC. Date-only values are left alone — parsing those
+   through Date() would shift them backwards west of Greenwich. */
+function localDate(iso){
+  if(!iso)return null;
+  if(iso.length<=10)return iso;
+  const d=new Date(iso);
+  return isNaN(d)?null:isoOf(d);
 }
-(function seedRoutines(){
-  for(let i=-10;i<40;i++){
-    ev(i,"Morning routine","08:30","09:30","Routine");
-    ev(i,"Wind-down","21:30","22:30","Routine");
-  }
-})();
-ev(-1,"MRI","09:15","10:15","Event");
-ev(0,"Math 10C discussion","15:00","15:50","Class");
-ev(0,"Job bid","18:45","20:00","Event");
-ev(1,"Econ 3 lecture","11:00","11:50","Class");
-ev(1,"Gym","17:00","18:00","Productivity");
-ev(2,"Math 10C discussion","15:00","15:50","Class");
-ev(2,"Econ 4 office hours","13:00","14:00","Office Hours");
-ev(3,"Rent due","09:00",null,"Due Date");
-ev(3,"Gym","17:00","18:00","Productivity");
-ev(4,"Gym","10:00","11:00","Productivity");
-ev(6,"MRI follow-up","09:15","10:15","Event");
-ev(7,"Math 10C discussion","15:00","15:50","Class");
-ev(8,"ASCEND first meeting","18:00","19:00","Event");
-ev(9,"Math 10C discussion","15:00","15:50","Class");
-ev(11,"Econ 3 midterm","08:00","10:00","Class");
-
-/* ---------- fake data: tasks ---------- */
-let _tid=1;
-const TASKS=[];
-function tk(off,name,kind,done){
-  TASKS.push({id:"t"+(_tid++),name,kind,done:!!done,date:off===null?null:addDays(REAL_TODAY,off)});
+function localTime(iso){
+  if(!iso||iso.length<=10)return null;
+  const d=new Date(iso);
+  return isNaN(d)?null:pad(d.getHours())+":"+pad(d.getMinutes());
 }
-tk(0,"Math 10C — read 14.3, do practice set","Task");
-tk(0,"freeCodeCamp — continue HTML lesson","Task");
-tk(0,"Email professor about office hours","Task",true);
-tk(0,"Laundry","Errand");
-tk(-2,"Econ 3 — outline chapter 4 notes","Task");
-tk(-3,"Return library book","Errand");
-tk(-17,"Old thing from ages ago","Task");
-tk(1,"Draft Econ 3 problem set","Task");
-tk(2,"Review 14.4 before discussion","Task");
-tk(4,"Groceries","Errand");
-tk(null,"Set up Fiverr profile","Task");
-tk(null,"Look up RSM scholarship deadline","Task");
-
-/* ---------- fake data: meal plan ---------- */
-const BK=["Scrambled eggs and toast","Peanut butter bread","Milkshake","Cream cheese bagel"];
-const LN=["Tuna sandwich","Boiled egg sandwich","Greek yogurt","Cream cheese bagel"];
-const DN=["Beef rice bowl","Tilapia and rice","Farfalle alfredo with spinach","House potatoes","Pasta"];
-const MEALS=[];
-(function seedMeals(){
-  let d=REAL_TODAY;
-  for(let i=0;i<14;i++){
-    MEALS.push({date:d,slot:"Breakfast",name:BK[i%BK.length]});
-    MEALS.push({date:d,slot:"Lunch",name:LN[i%LN.length]});
-    MEALS.push({date:d,slot:"Dinner",name:DN[i%DN.length]});
-    d=addDays(d,1);
-  }
-})();
 
 /* ---------- state ---------- */
-const TODAY=REAL_TODAY;
+let CAL=[],TASKS=[],MEALS=[],RECIPES=[];
+let mealsEnabled=true;
+let TODAY=isoOf(new Date());
 let view=TODAY;
 let wkStart=startOfWeek(TODAY);
 let openSlot=null;
 let addOpen={day:false,nodate:false};
+let loaded=false,loadError=null,busy=0;
+let _tmp=0;
 const UNFINISHED_WINDOW=7;
+
+/* ---------- talking to the server ---------- */
+async function pull(){
+  const r=await fetch("/api/notion",{headers:{Accept:"application/json"}});
+  const j=await r.json().catch(()=>({message:"The server sent something unreadable."}));
+  if(!r.ok)throw new Error(j.message||("Request failed ("+r.status+")"));
+  return j;
+}
+async function push(payload){
+  busy++;renderBusy();
+  try{
+    const r=await fetch("/api/notion",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    const j=await r.json().catch(()=>({message:"The server sent something unreadable."}));
+    if(!r.ok)throw new Error(j.message||("Save failed ("+r.status+")"));
+    return j;
+  }finally{busy--;renderBusy();}
+}
+
+function absorb(data){
+  mealsEnabled=data.mealsEnabled!==false;
+  CAL=(data.events||[]).map(e=>{
+    const date=localDate(e.start);
+    const start=localTime(e.start);
+    let end=localTime(e.end);
+    /* an event running past midnight is clamped so it doesn't overflow the rail */
+    if(end&&e.end&&localDate(e.end)!==date)end="23:59";
+    return {id:e.id,name:e.name,type:e.type,routine:!!e.routine,
+            date,start,end,allDay:!start};
+  }).filter(e=>e.date);
+  TASKS=(data.tasks||[]).map(t=>({
+    id:t.id,name:t.name,date:t.date?t.date.slice(0,10):null,
+    kind:t.kind==="Errand"?"Errand":"Task",done:!!t.done
+  }));
+  MEALS=(data.meals||[]).map(m=>({
+    id:m.id,name:m.name,date:m.date.slice(0,10),slot:m.slot,recipe:m.recipe||[]
+  }));
+  RECIPES=(data.recipes||[]).map(r=>({id:r.id,name:r.name,slot:r.slot}));
+  TODAY=isoOf(new Date());
+}
+
+async function load(){
+  try{
+    absorb(await pull());
+    loaded=true;loadError=null;
+    if(view===null)view=TODAY;
+  }catch(e){
+    loadError=e.message||"Couldn't reach Notion.";
+  }
+  render();
+}
 
 /* ---------- derived ---------- */
 function eventsOn(d){
-  return CAL.filter(e=>e.date===d).slice().sort((a,b)=>mins(a.start)-mins(b.start));
+  return CAL.filter(e=>e.date===d&&!e.allDay).sort((a,b)=>mins(a.start)-mins(b.start));
 }
-function endOf(e){return e.end?mins(e.end):mins(e.start)+60;}
+function allDayOn(d){return CAL.filter(e=>e.date===d&&e.allDay);}
+function endOf(e){return e.end?Math.max(mins(e.end),mins(e.start)+15):mins(e.start)+60;}
 
-function mealsOn(d){
-  const o={};
-  MEALS.filter(m=>m.date===d).forEach(m=>{o[m.slot]=m;});
-  return o;
-}
-function planEnd(){
-  let last=null;
-  MEALS.forEach(m=>{if(!last||m.date>last)last=m.date;});
-  return last;
-}
+function mealsOn(d){const o={};MEALS.filter(m=>m.date===d).forEach(m=>{o[m.slot]=m;});return o;}
+function planEnd(){let last=null;MEALS.forEach(m=>{if(!last||m.date>last)last=m.date;});return last;}
+/* Everything you know how to make for this slot, from the recipe library.
+   Untagged entries are offered for every slot rather than hidden. If the
+   library isn't wired up, fall back to whatever is already in the plan. */
 function optionsFor(slot){
-  const seen=[],out=[];
-  MEALS.filter(m=>m.slot===slot&&m.date>=TODAY).forEach(m=>{
-    if(seen.indexOf(m.name)===-1){seen.push(m.name);out.push(m.name);}
+  if(RECIPES.length){
+    const out=[],seen={};
+    RECIPES.forEach(r=>{
+      if(r.slot&&r.slot!==slot)return;
+      if(seen[r.name])return;
+      seen[r.name]=1;out.push(r);
+    });
+    return out.sort((a,b)=>a.name.localeCompare(b.name));
+  }
+  const seen={},out=[];
+  MEALS.filter(m=>m.slot===slot&&m.name).forEach(m=>{
+    if(seen[m.name])return;
+    seen[m.name]=1;out.push({id:(m.recipe&&m.recipe[0])||null,name:m.name,slot:slot});
   });
   return out;
 }
@@ -334,45 +370,63 @@ function unfinishedTasks(){
               .sort((a,b)=>a.date<b.date?-1:1);
 }
 function overdueErrands(){
-  return TASKS.filter(t=>t.kind==="Errand"&&!t.done&&t.date&&t.date<TODAY&&diffDays(TODAY,t.date)<=UNFINISHED_WINDOW)
+  return TASKS.filter(t=>t.kind==="Errand"&&!t.done&&t.date&&t.date<TODAY)
               .sort((a,b)=>a.date<b.date?-1:1);
 }
 
-/* ---------- header ---------- */
+/* ---------- chrome ---------- */
+function renderBusy(){
+  const el=document.getElementById("busy");
+  if(el)el.style.opacity=busy>0?"1":"0";
+}
+function toast(msg){
+  const el=document.getElementById("toast");
+  el.textContent=msg;
+  el.hidden=false;
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>{el.hidden=true;},6000);
+}
+
 function renderHeader(){
   document.getElementById("hdrDate").textContent=longDate(view);
-  const evs=eventsOn(view);
+  const evs=eventsOn(view).length+allDayOn(view).length;
   let open=tasksOn(view,"Task").filter(t=>!t.done).length+tasksOn(view,"Errand").filter(t=>!t.done).length;
   if(view===TODAY)open+=unfinishedTasks().length+overdueErrands().length;
-  const bits=[evs.length+(evs.length===1?" block":" blocks"),open+" open"];
-  document.getElementById("hdrSub").textContent=(view===TODAY?"Today · ":"")+bits.join(" · ");
+  document.getElementById("hdrSub").textContent=
+    (view===TODAY?"Today · ":"")+evs+(evs===1?" block · ":" blocks · ")+open+" open";
 }
 
 /* ---------- meals ---------- */
 function renderMeals(){
   const box=document.getElementById("meals");
+  if(!mealsEnabled){box.hidden=true;return;}
+  box.hidden=false;
   const m=mealsOn(view);
   const last=planEnd();
-  const left=diffDays(last,TODAY);
   let cd="";
-  if(left<0)cd="Plan has<br>run out";
-  else if(left===0)cd="Plan ends<br>today";
-  else cd="Plan ends<br>in "+left+(left===1?" day":" days");
-
+  if(!last)cd="No plan<br>yet";
+  else{
+    const left=diffDays(last,TODAY);
+    if(left<0)cd="Plan has<br>run out";
+    else if(left===0)cd="Plan ends<br>today";
+    else cd="Plan ends<br>in "+left+(left===1?" day":" days");
+  }
   let h='<div class="meals-grid">';
   ["Breakfast","Lunch","Dinner"].forEach(slot=>{
-    const val=m[slot]?m[slot].name:"No "+slot.toLowerCase()+" set";
-    const muted=m[slot]?"":' style="color:var(--text-3)"';
+    const set=!!(m[slot]&&m[slot].name);
+    const val=set?m[slot].name:"No "+slot.toLowerCase()+" set";
     h+='<div class="slot'+(openSlot===slot?" open":"")+'" data-slot="'+slot+'">'+
-         '<div class="slot-label">'+slot+'</div>'+
-         '<div class="slot-val"'+muted+'><span>'+esc(val)+'</span><span class="car">▾</span></div>';
+       '<div class="slot-label">'+slot+'</div>'+
+       '<div class="slot-val"'+(set?"":' style="color:var(--text-3)"')+'>'+
+       '<span>'+esc(val)+'</span><span class="car">▾</span></div>';
     if(openSlot===slot){
       const opts=optionsFor(slot);
-      h+='<div class="picker" data-picker="1"><div class="picker-h">'+slot+'s in this plan</div>';
-      if(!opts.length)h+='<div class="picker-i" style="color:var(--text-3);cursor:default">Nothing in the plan yet</div>';
-      opts.forEach(name=>{
-        const on=m[slot]&&m[slot].name===name;
-        h+='<div class="picker-i" data-pick="'+esc(name)+'"><span>'+esc(name)+'</span>'+(on?'<span class="tick">✓</span>':'')+'</div>';
+      h+='<div class="picker"><div class="picker-h">'+slot+'s in this plan</div>';
+      if(!opts.length)h+='<div class="picker-i" style="color:var(--text-3);cursor:default">Nothing in your recipe library for this slot</div>';
+      opts.forEach(o=>{
+        h+='<div class="picker-i" data-pick="'+esc(o.name)+'" data-rid="'+esc(o.id||"")+'">'+
+           '<span>'+esc(o.name)+'</span>'+
+           (set&&m[slot].name===o.name?'<span class="tick">✓</span>':'')+'</div>';
       });
       h+='</div>';
     }
@@ -386,21 +440,26 @@ function renderMeals(){
 function renderSchedule(){
   const box=document.getElementById("sched");
   const evs=eventsOn(view);
-  if(!evs.length){box.innerHTML='<div class="empty">Nothing scheduled.</div>';box.style.height="auto";return;}
+  const ad=allDayOn(view);
+  const adBox=document.getElementById("allday");
+  adBox.innerHTML=ad.map(e=>'<div class="allday">'+esc(e.name)+'</div>').join("");
+
+  if(!evs.length){
+    box.style.height="auto";
+    box.innerHTML=ad.length?"":'<div class="empty">Nothing scheduled.</div>';
+    return;
+  }
 
   const PX=34;
   let first=Math.floor(mins(evs[0].start)/60);
-  let lastM=0;
-  evs.forEach(e=>{lastM=Math.max(lastM,endOf(e));});
+  let lastM=0;evs.forEach(e=>{lastM=Math.max(lastM,endOf(e));});
   let last=Math.ceil(lastM/60);
   if(last-first<3)last=first+3;
-  const span=last-first;
-  const H=span*PX;
+  if(last>24)last=24;
+  const span=last-first,H=span*PX;
   const top=m=>(m-first*60)/60*PX;
 
-  /* group overlapping events into clusters so they can sit side by side */
-  const clusters=[];
-  let cur=[],curEnd=-1;
+  const clusters=[];let cur=[],curEnd=-1;
   evs.forEach(e=>{
     if(cur.length&&mins(e.start)>=curEnd){clusters.push({items:cur,start:mins(cur[0].start),end:curEnd});cur=[];curEnd=-1;}
     cur.push(e);curEnd=Math.max(curEnd,endOf(e));
@@ -416,27 +475,21 @@ function renderSchedule(){
   clusters.forEach(function(cl,ci){
     const colEnd=[];
     cl.items.forEach(function(e){
-      const s=mins(e.start),en=endOf(e);
-      let c=0;
+      const s=mins(e.start);let c=0;
       while(c<colEnd.length&&colEnd[c]>s)c++;
-      colEnd[c]=en;
-      e._col=c;
+      colEnd[c]=endOf(e);e._col=c;
     });
     const n=colEnd.length;
     cl.items.forEach(function(e){
-      const s=mins(e.start),en=endOf(e);
-      const w=100/n;
+      const s=mins(e.start),en=endOf(e),w=100/n;
       h+='<div class="ev" style="top:'+top(s)+'px;left:'+(e._col*w)+'%;width:calc('+w+'% - 4px);height:'+
          Math.max(30,(en-s)/60*PX)+'px">'+
-         '<span class="ev-t">'+esc(e.title)+'</span><span class="ev-h">'+fmtShort(e.start)+'</span></div>';
+         '<span class="ev-t">'+esc(e.name)+'</span><span class="ev-h">'+fmtShort(e.start)+'</span></div>';
     });
     const nx=clusters[ci+1];
-    if(nx){
-      const g=nx.start-cl.end;
-      if(g>0){
-        const gy=top(cl.end),gh=g/60*PX;
-        h+='<div class="gaplab" style="top:'+(gy+gh/2-9)+'px;left:0">'+dur(g)+' open</div>';
-      }
+    if(nx&&nx.start-cl.end>0){
+      const g=nx.start-cl.end,gy=top(cl.end),gh=g/60*PX;
+      h+='<div class="gaplab" style="top:'+(gy+gh/2-9)+'px;left:0">'+dur(g)+' open</div>';
     }
   });
   h+='</div>';
@@ -459,7 +512,7 @@ function taskRow(t,opts){
   opts=opts||{};
   let right="";
   if(opts.showKind&&t.kind==="Errand")right='<span class="tag">errand</span>';
-  if(opts.showAge){
+  if(opts.showAge&&t.date){
     const d=diffDays(TODAY,t.date);
     right='<span class="overdue">'+(d===1?"1 day":d+" days")+'</span>';
   }
@@ -517,27 +570,27 @@ function renderTodo(){
     h+='<div class="addline" id="ndOpen"><span>+</span>Add without a date</div>';
   }
   h+='</div>';
-
   box.innerHTML=h;
 }
 
-/* ---------- coming up + tomorrow (pinned to real today) ---------- */
+/* ---------- coming up + tomorrow, pinned to the real today ---------- */
 function renderUpcoming(){
   const box=document.getElementById("upcoming");
-  const list=CAL.filter(e=>e.type!=="Routine"&&e.date>TODAY)
-                .sort((a,b)=>a.date===b.date?mins(a.start)-mins(b.start):(a.date<b.date?-1:1))
-                .slice(0,5);
+  const list=CAL.filter(e=>!e.routine&&e.date>TODAY)
+    .sort((a,b)=>a.date===b.date?((a.start||"")<(b.start||"")?-1:1):(a.date<b.date?-1:1))
+    .slice(0,5);
   if(!list.length){box.innerHTML='<div class="empty">Nothing on the horizon.</div>';return;}
   box.innerHTML=list.map(e=>'<div class="up"><div class="up-d">'+shortDate(e.date)+'</div>'+
-    '<div class="up-t">'+esc(e.title)+'</div></div>').join("");
+    '<div class="up-t">'+esc(e.name)+'</div></div>').join("");
 }
 function renderTomorrow(){
   const box=document.getElementById("tomorrow");
   const d=addDays(TODAY,1);
-  const evs=eventsOn(d);
+  const evs=eventsOn(d),ad=allDayOn(d);
   let h='<div class="mini-h">Tomorrow</div>';
-  if(!evs.length)h+='<div class="empty">Nothing scheduled.</div>';
-  else evs.forEach(e=>{h+='<div class="tmr-r"><span class="tmr-n">'+esc(e.title)+'</span>'+
+  if(!evs.length&&!ad.length)h+='<div class="empty">Nothing scheduled.</div>';
+  ad.forEach(e=>{h+='<div class="tmr-r"><span class="tmr-n">'+esc(e.name)+'</span><span class="tmr-h">all day</span></div>';});
+  evs.forEach(e=>{h+='<div class="tmr-r"><span class="tmr-n">'+esc(e.name)+'</span>'+
     '<span class="tmr-h">'+fmtShort(e.start)+'</span></div>';});
   box.innerHTML=h;
 }
@@ -545,8 +598,7 @@ function renderTomorrow(){
 /* ---------- task manager ---------- */
 function renderTM(){
   const body=document.getElementById("tmBody");
-  const end=addDays(wkStart,6);
-  const a=parse(wkStart),b=parse(end);
+  const end=addDays(wkStart,6),a=parse(wkStart),b=parse(end);
   document.getElementById("tmSub").textContent=
     MONS[a.getMonth()]+" "+a.getDate()+" – "+MONS[b.getMonth()]+" "+b.getDate()+" · "+
     TASKS.filter(t=>t.date&&t.date>=wkStart&&t.date<=end&&!t.done).length+" open";
@@ -603,57 +655,109 @@ function renderTM(){
   body.innerHTML=h;
 }
 
-/* ---------- render all ---------- */
+/* ---------- render ---------- */
 function render(){
+  const stage=document.getElementById("stage");
+  const splash=document.getElementById("splash");
+  if(!loaded){
+    stage.hidden=true;splash.hidden=false;
+    splash.innerHTML=loadError
+      ? '<div class="err"><div class="err-h">Couldn\'t load your Notion data</div>'+
+        '<div class="err-b">'+esc(loadError)+'</div>'+
+        '<button class="btn-sm" id="retry">Try again</button></div>'
+      : '<div class="empty">Loading…</div>';
+    return;
+  }
+  splash.hidden=true;stage.hidden=false;
   renderHeader();renderMeals();renderSchedule();renderTodo();renderUpcoming();renderTomorrow();
+  renderBusy();
   if(!document.getElementById("tmOvl").hidden)renderTM();
 }
 
-/* ---------- events ---------- */
-function toggle(id){
+/* ---------- actions (optimistic, reverted if the save fails) ---------- */
+async function toggle(id){
   const t=TASKS.filter(x=>x.id===id)[0];
-  if(t){t.done=!t.done;render();}
+  if(!t)return;
+  const was=t.done;
+  t.done=!was;render();
+  try{await push({action:"updateTask",id:id,done:t.done});}
+  catch(e){t.done=was;render();toast("Didn't save: "+e.message);}
 }
-function addTask(name,kind,date){
-  if(!name||!name.trim())return false;
-  TASKS.push({id:"t"+(_tid++),name:name.trim(),kind:kind,date:date||null,done:false});
+
+async function addTask(name,kind,date){
+  name=(name||"").trim();
+  if(!name)return false;
+  const tmp="tmp"+(++_tmp);
+  const row={id:tmp,name:name,kind:kind==="Errand"?"Errand":"Task",date:date||null,done:false};
+  TASKS.push(row);render();
+  try{
+    const r=await push({action:"createTask",name:name,kind:row.kind,date:row.date});
+    if(r&&r.task){row.id=r.task.id;render();}
+  }catch(e){
+    TASKS=TASKS.filter(x=>x.id!==tmp);render();
+    toast("Didn't save: "+e.message);
+  }
   return true;
 }
 
+async function moveTask(id,date){
+  const t=TASKS.filter(x=>x.id===id)[0];
+  if(!t)return;
+  const was=t.date;
+  t.date=date||null;render();
+  try{await push({action:"updateTask",id:id,date:t.date});}
+  catch(e){t.date=was;render();toast("Didn't save: "+e.message);}
+}
+
+async function pickMeal(slot,name,recipeId){
+  const existing=MEALS.filter(m=>m.date===view&&m.slot===slot)[0];
+  const rec=recipeId?[recipeId]:[];
+  const was=existing?{name:existing.name,recipe:existing.recipe}:null;
+  let row=existing;
+  if(row){row.name=name;row.recipe=rec;}
+  else{row={id:null,date:view,slot:slot,name:name,recipe:rec};MEALS.push(row);}
+  openSlot=null;render();
+  try{
+    const r=await push({action:"setMeal",id:row.id,date:view,slot:slot,name:name,recipeId:recipeId||null});
+    if(r&&r.meal)row.id=r.meal.id;
+  }catch(e){
+    if(!was&&!row.id)MEALS=MEALS.filter(m=>m!==row);
+    else if(was){row.name=was.name;row.recipe=was.recipe;}
+    render();toast("Didn't save: "+e.message);
+  }
+}
+
+/* ---------- events ---------- */
 document.addEventListener("click",function(e){
   const t=e.target;
+  if(t.id==="retry"){loadError=null;render();load();return;}
 
   const cb=t.closest?t.closest("[data-toggle]"):null;
   if(cb){toggle(cb.getAttribute("data-toggle"));return;}
 
   const pick=t.closest?t.closest("[data-pick]"):null;
-  if(pick){
-    const name=pick.getAttribute("data-pick");
-    const row=MEALS.filter(m=>m.date===view&&m.slot===openSlot)[0];
-    if(row)row.name=name;
-    else MEALS.push({date:view,slot:openSlot,name:name});
-    openSlot=null;render();return;
-  }
+  if(pick){pickMeal(openSlot,pick.getAttribute("data-pick"),pick.getAttribute("data-rid")||null);return;}
+
   const slot=t.closest?t.closest(".slot"):null;
-  if(slot){
-    const s=slot.getAttribute("data-slot");
-    openSlot=(openSlot===s)?null:s;render();return;
-  }
+  if(slot){const s=slot.getAttribute("data-slot");openSlot=(openSlot===s)?null:s;render();return;}
   if(openSlot){openSlot=null;render();}
 
-  if(t.id==="addOpen"){addOpen.day=true;render();document.getElementById("addName").focus();return;}
+  if(t.id==="addOpen"){addOpen.day=true;render();const f=document.getElementById("addName");if(f)f.focus();return;}
   if(t.id==="addCancel"){addOpen.day=false;render();return;}
   if(t.id==="addGo"){
-    if(addTask(document.getElementById("addName").value,document.getElementById("addKind").value,document.getElementById("addDate").value)){
-      addOpen.day=false;
-    }
-    render();return;
+    const n=document.getElementById("addName").value;
+    const k=document.getElementById("addKind").value;
+    const d=document.getElementById("addDate").value;
+    if(n.trim()){addOpen.day=false;addTask(n,k,d||null);}else render();
+    return;
   }
-  if(t.id==="ndOpen"){addOpen.nodate=true;render();document.getElementById("ndName").focus();return;}
+  if(t.id==="ndOpen"){addOpen.nodate=true;render();const f=document.getElementById("ndName");if(f)f.focus();return;}
   if(t.id==="ndCancel"){addOpen.nodate=false;render();return;}
   if(t.id==="ndGo"){
-    if(addTask(document.getElementById("ndName").value,document.getElementById("ndKind").value,null))addOpen.nodate=false;
-    render();return;
+    const n=document.getElementById("ndName").value;
+    const k=document.getElementById("ndKind").value;
+    if(n.trim()){addOpen.nodate=false;addTask(n,k,null);}else render();
+    return;
   }
 
   const no=t.closest?t.closest("[data-newopen]"):null;
@@ -663,22 +767,24 @@ document.addEventListener("click",function(e){
   const ng=t.closest?t.closest("[data-newgo]"):null;
   if(ng){
     const d=ng.getAttribute("data-newgo");
-    const nm=document.querySelector('[data-newname="'+d+'"]').value;
-    const kd=document.querySelector('[data-newkind="'+d+'"]').value;
+    const n=document.querySelector('[data-newname="'+d+'"]').value;
+    const k=document.querySelector('[data-newkind="'+d+'"]').value;
     const dt=document.querySelector('[data-newdate="'+d+'"]').value;
-    if(addTask(nm,kd,dt||null))addOpen["d"+d]=false;
-    render();return;
+    if(n.trim()){addOpen["d"+d]=false;addTask(n,k,dt||null);}else renderTM();
+    return;
   }
   if(t.id==="tmNdOpen"){addOpen.tmnodate=true;renderTM();return;}
   if(t.id==="tmNdCancel"){addOpen.tmnodate=false;renderTM();return;}
   if(t.id==="tmNdGo"){
-    if(addTask(document.getElementById("tmNdName").value,document.getElementById("tmNdKind").value,null))addOpen.tmnodate=false;
-    render();return;
+    const n=document.getElementById("tmNdName").value;
+    const k=document.getElementById("tmNdKind").value;
+    if(n.trim()){addOpen.tmnodate=false;addTask(n,k,null);}else renderTM();
+    return;
   }
 
   if(t.id==="prevDay"){view=addDays(view,-1);openSlot=null;addOpen.day=false;render();return;}
   if(t.id==="nextDay"){view=addDays(view,1);openSlot=null;addOpen.day=false;render();return;}
-  if(t.id==="todayBtn"){view=TODAY;openSlot=null;render();return;}
+  if(t.id==="todayBtn"){TODAY=isoOf(new Date());view=TODAY;openSlot=null;render();load();return;}
 
   if(t.id==="openTM"){wkStart=startOfWeek(view);document.getElementById("tmOvl").hidden=false;renderTM();return;}
   if(t.id==="closeTM"||t.id==="tmOvl"){document.getElementById("tmOvl").hidden=true;return;}
@@ -688,10 +794,7 @@ document.addEventListener("click",function(e){
 
 document.addEventListener("change",function(e){
   const mv=e.target.getAttribute?e.target.getAttribute("data-move"):null;
-  if(mv){
-    const t=TASKS.filter(x=>x.id===mv)[0];
-    if(t){t.date=e.target.value||null;render();}
-  }
+  if(mv)moveTask(mv,e.target.value||null);
 });
 
 document.addEventListener("keydown",function(e){
@@ -701,18 +804,29 @@ document.addEventListener("keydown",function(e){
   }
   if(e.key==="Enter"){
     const id=e.target.id||"";
-    if(id==="addName"){document.getElementById("addGo").click();}
-    if(id==="ndName"){document.getElementById("ndGo").click();}
-    if(id==="tmNdName"){document.getElementById("tmNdGo").click();}
+    if(id==="addName"){document.getElementById("addGo").click();return;}
+    if(id==="ndName"){document.getElementById("ndGo").click();return;}
+    if(id==="tmNdName"){document.getElementById("tmNdGo").click();return;}
     const nn=e.target.getAttribute?e.target.getAttribute("data-newname"):null;
-    if(nn)document.querySelector('[data-newgo="'+nn+'"]').click();
+    if(nn){document.querySelector('[data-newgo="'+nn+'"]').click();return;}
   }
   if((e.key===" "||e.key==="Enter")&&e.target.getAttribute&&e.target.getAttribute("data-toggle")){
     e.preventDefault();toggle(e.target.getAttribute("data-toggle"));
   }
 });
 
+/* Pick up edits made in Notion when you come back to the tab, and roll the day
+   over if it's been open past midnight. */
+document.addEventListener("visibilitychange",function(){
+  if(document.visibilityState==="visible"&&loaded&&busy===0){
+    const now=isoOf(new Date());
+    if(now!==TODAY&&view===TODAY)view=now;
+    load();
+  }
+});
+
 render();
+load();
 </script>
 </body>
 </html>
