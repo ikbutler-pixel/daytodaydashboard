@@ -11,8 +11,9 @@
 //   NOTION_RECIPES_DB   Meals & Recipes database id, from its URL (optional)
 //
 // Database ids are the jumble in the page URL before the "?". Not secret.
-// Meals & Recipes supplies the options in the meal picker; without it the picker
-// falls back to whatever is already in the plan.
+// Meals & Recipes supplies the options in the meal picker. Only pages typed
+// MP Breakfast, MP Lunch or MP Dinner can fill a slot; Sides and everything else
+// are sent along but ignored by the dashboard.
 
 const NOTION = 'https://api.notion.com/v1';
 const VERSION = '2025-09-03';
@@ -141,14 +142,45 @@ function mapMeal(page) {
   };
 }
 
-// The library's slot property is called "Time of Day" in Isaiah's workspace and
-// "Slot" in the setup guide, so accept either.
+// The slot lives in the Type property of Meals & Recipes ("MP Breakfast",
+// "MP Lunch", "MP Dinner", "Side"). Older setup guides called it "Time of Day"
+// or "Slot", so those are still accepted as fallbacks. The value is passed
+// through as written — the dashboard is what decides that only the MP ones can
+// fill a meal slot.
+const SLOT_WORDS = ['breakfast', 'lunch', 'dinner'];
+
+function looksLikeSlot(name) {
+  if (!name) return false;
+  const t = String(name).trim().replace(/^MP[\s._-]*/i, '').toLowerCase();
+  return SLOT_WORDS.includes(t);
+}
+
+// Type is a select in most workspaces, but read it as a status or a
+// multi-select too, so a renamed or retyped property doesn't silently empty the
+// picker. Out of a multi-select, only a value that reads like a slot is taken —
+// otherwise a method tag would be mistaken for one.
+function slotFromProp(p) {
+  if (!p) return null;
+  if (p.select && p.select.name) return p.select.name;
+  if (p.status && p.status.name) return p.status.name;
+  if (Array.isArray(p.multi_select)) {
+    const hit = p.multi_select.filter((o) => looksLikeSlot(o.name))[0];
+    if (hit) return hit.name;
+  }
+  return null;
+}
+
 function mapRecipe(page) {
   const p = page.properties || {};
   return {
     id: page.id,
     name: title(p.Name),
-    slot: select(p['Time of Day']) || select(p.Slot) || select(p.Meal) || null,
+    slot:
+      slotFromProp(p.Type) ||
+      slotFromProp(p['Time of Day']) ||
+      slotFromProp(p.Slot) ||
+      slotFromProp(p.Meal) ||
+      null,
   };
 }
 
@@ -273,10 +305,15 @@ async function setMeal(body) {
   const props = {
     Name: { title: [{ text: { content: name } }] },
   };
+  // The relation is always written, never left alone. Skipping it when there's
+  // no recipe is what used to leave last week's spaghetti still linked to a row
+  // now reading "Dining hall", quietly inflating the rollups.
   if (body.recipeId) {
     props.Recipe = { relation: [{ id: body.recipeId.replace(/-/g, '') }] };
   } else if (Array.isArray(body.recipe)) {
-    props.Recipe = { relation: body.recipe.map((id) => ({ id })) };
+    props.Recipe = { relation: body.recipe.map((id) => ({ id: id.replace(/-/g, '') })) };
+  } else {
+    props.Recipe = { relation: [] };
   }
 
   if (body.id) {
@@ -300,6 +337,19 @@ async function setMeal(body) {
   return { meal: mapMeal(page) };
 }
 
+// Empty one slot on one day. The row is archived rather than blanked: a Meal
+// Plan full of nameless rows is worse than no row at all, and archived pages sit
+// in Notion's trash for 30 days if you clear the wrong night by mistake.
+async function clearMeal(body) {
+  if (!process.env.NOTION_MEALPLAN_DB) throw new Error('NOTION_MEALPLAN_DB is not set, so meals can\'t be changed.');
+  if (!body.id) throw new Error('Missing the id of the meal to clear.');
+  const page = await notion(`/pages/${body.id.replace(/-/g, '')}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ archived: true }),
+  });
+  return { id: page.id, cleared: true };
+}
+
 /* ---------- entry point ---------- */
 
 export default async function handler(req, res) {
@@ -317,6 +367,7 @@ export default async function handler(req, res) {
         case 'updateTask': return res.status(200).json(await updateTask(body));
         case 'deleteTask': return res.status(200).json(await deleteTask(body));
         case 'setMeal':    return res.status(200).json(await setMeal(body));
+        case 'clearMeal':  return res.status(200).json(await clearMeal(body));
         default:
           return res.status(400).json({ error: 'Unknown action: ' + body.action });
       }
