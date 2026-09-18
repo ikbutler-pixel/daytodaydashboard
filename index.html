@@ -69,6 +69,9 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 .picker-i{font-size:13px;padding:6px 7px;border-radius:var(--radius);cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;}
 .picker-i:hover{background:var(--hover);}
 .picker-i .tick{color:var(--text-3);font-size:12px;}
+.picker-sep{border-top:1px solid var(--line);margin:5px 3px;}
+.picker-note{font-size:12px;color:var(--text-3);padding:2px 7px 6px;line-height:1.45;}
+.picker-clear{color:var(--text-2);}
 
 .cols{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.95fr);gap:22px;}
 .colh{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3);height:24px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
@@ -267,6 +270,27 @@ function localTime(iso){
   return isNaN(d)?null:pad(d.getHours())+":"+pad(d.getMinutes());
 }
 
+/* ---------- meal slots ---------- */
+/* The Meals & Recipes database tags every page with a Type. Only the three MP
+   types belong in a meal slot; Side and anything else never appears in a
+   picker. The prefix is stripped here so the dashboard works whether the
+   server hands back "MP Lunch" or already-shortened "Lunch". A recipe with no
+   Type, or a Type that isn't one of the three, is dropped rather than offered
+   everywhere. */
+const SLOTS=["Breakfast","Lunch","Dinner"];
+function slotOf(type){
+  if(!type)return null;
+  const t=String(type).trim().replace(/^MP[\s\u00a0._-]*/i,"").toLowerCase();
+  for(let i=0;i<SLOTS.length;i++){
+    if(SLOTS[i].toLowerCase()===t)return SLOTS[i];
+  }
+  return null;
+}
+
+/* Meals you didn't cook. These save to the Meal Plan as a plain name with no
+   recipe attached, so a dining-hall day still fills the slot. */
+const EATING_OUT=["Dining hall","Restaurant"];
+
 /* ---------- state ---------- */
 let CAL=[],TASKS=[],MEALS=[],RECIPES=[];
 let mealsEnabled=true;
@@ -318,7 +342,9 @@ function absorb(data){
   MEALS=(data.meals||[]).map(m=>({
     id:m.id,name:m.name,date:m.date.slice(0,10),slot:m.slot,recipe:m.recipe||[]
   }));
-  RECIPES=(data.recipes||[]).map(r=>({id:r.id,name:r.name,slot:r.slot}));
+  RECIPES=(data.recipes||[])
+    .map(r=>({id:r.id,name:r.name,slot:slotOf(r.slot||r.type)}))
+    .filter(r=>r.name&&r.slot);
   TODAY=isoOf(new Date());
 }
 
@@ -341,26 +367,20 @@ function allDayOn(d){return CAL.filter(e=>e.date===d&&e.allDay);}
 function endOf(e){return e.end?Math.max(mins(e.end),mins(e.start)+15):mins(e.start)+60;}
 
 function mealsOn(d){const o={};MEALS.filter(m=>m.date===d).forEach(m=>{o[m.slot]=m;});return o;}
-function planEnd(){let last=null;MEALS.forEach(m=>{if(!last||m.date>last)last=m.date;});return last;}
-/* Everything you know how to make for this slot, from the recipe library.
-   Untagged entries are offered for every slot rather than hidden. If the
-   library isn't wired up, fall back to whatever is already in the plan. */
+/* A cleared slot can leave a nameless row behind in Meal Plan, depending on how
+   the server clears it. Those don't count as a planned day. */
+function planEnd(){let last=null;MEALS.forEach(m=>{if(!m.name)return;if(!last||m.date>last)last=m.date;});return last;}
+/* The recipes you can cook for this slot. An exact slot match only — no
+   untagged recipes, no Sides, and no falling back to names already sitting in
+   the plan, which is how non-MP meals used to creep back into the list. */
 function optionsFor(slot){
-  if(RECIPES.length){
-    const out=[],seen={};
-    RECIPES.forEach(r=>{
-      if(r.slot&&r.slot!==slot)return;
-      if(seen[r.name])return;
-      seen[r.name]=1;out.push(r);
-    });
-    return out.sort((a,b)=>a.name.localeCompare(b.name));
-  }
-  const seen={},out=[];
-  MEALS.filter(m=>m.slot===slot&&m.name).forEach(m=>{
-    if(seen[m.name])return;
-    seen[m.name]=1;out.push({id:(m.recipe&&m.recipe[0])||null,name:m.name,slot:slot});
+  const out=[],seen={};
+  RECIPES.forEach(r=>{
+    if(r.slot!==slot)return;
+    if(seen[r.name])return;
+    seen[r.name]=1;out.push(r);
   });
-  return out;
+  return out.sort((a,b)=>a.name.localeCompare(b.name));
 }
 
 function tasksOn(d,kind){return TASKS.filter(t=>t.date===d&&t.kind===kind);}
@@ -412,7 +432,7 @@ function renderMeals(){
     else cd="Plan ends<br>in "+left+(left===1?" day":" days");
   }
   let h='<div class="meals-grid">';
-  ["Breakfast","Lunch","Dinner"].forEach(slot=>{
+  SLOTS.forEach(slot=>{
     const set=!!(m[slot]&&m[slot].name);
     const val=set?m[slot].name:"No "+slot.toLowerCase()+" set";
     h+='<div class="slot'+(openSlot===slot?" open":"")+'" data-slot="'+slot+'">'+
@@ -421,13 +441,24 @@ function renderMeals(){
        '<span>'+esc(val)+'</span><span class="car">▾</span></div>';
     if(openSlot===slot){
       const opts=optionsFor(slot);
-      h+='<div class="picker"><div class="picker-h">'+slot+'s in this plan</div>';
-      if(!opts.length)h+='<div class="picker-i" style="color:var(--text-3);cursor:default">Nothing in your recipe library for this slot</div>';
+      const cur=set?m[slot].name:null;
+      h+='<div class="picker"><div class="picker-h">Cook</div>';
+      if(!opts.length)h+='<div class="picker-note">No MP '+slot+' recipes loaded. Tag the recipe MP '+slot+' in Meals &amp; Recipes and it shows up here.</div>';
       opts.forEach(o=>{
         h+='<div class="picker-i" data-pick="'+esc(o.name)+'" data-rid="'+esc(o.id||"")+'">'+
            '<span>'+esc(o.name)+'</span>'+
-           (set&&m[slot].name===o.name?'<span class="tick">✓</span>':'')+'</div>';
+           (cur===o.name?'<span class="tick">✓</span>':'')+'</div>';
       });
+      h+='<div class="picker-sep"></div><div class="picker-h">Eating out</div>';
+      EATING_OUT.forEach(n=>{
+        h+='<div class="picker-i" data-pick="'+esc(n)+'" data-rid="">'+
+           '<span>'+esc(n)+'</span>'+
+           (cur===n?'<span class="tick">✓</span>':'')+'</div>';
+      });
+      if(set){
+        h+='<div class="picker-sep"></div>'+
+           '<div class="picker-i picker-clear" data-clear="'+slot+'">Clear this slot</div>';
+      }
       h+='</div>';
     }
     h+='</div>';
@@ -727,6 +758,58 @@ async function pickMeal(slot,name,recipeId){
   }
 }
 
+/* Clearing a slot.
+
+   One request. The server archives the Meal Plan row, so it lands in Notion's
+   trash rather than being destroyed, and a nameless row never gets left behind.
+
+   Two things still get checked. A server can answer "fine" to a request it
+   quietly ignored, so this re-reads Notion afterwards and says so if the meal is
+   still sitting there — nothing claims to be cleared until Notion has been asked
+   again. And if the meal can't be cleared, it goes straight back on screen,
+   because a slot that looks empty here while it's still filled in Notion is
+   worse than no button at all. */
+async function clearMeal(slot){
+  const row=MEALS.filter(m=>m.date===view&&m.slot===slot)[0];
+  if(!row)return;
+  openSlot=null;
+
+  if(!row.id){
+    MEALS=MEALS.filter(m=>m!==row);render();
+    toast("That slot hadn't saved to Notion yet, so there was nothing to clear.");
+    return;
+  }
+
+  const kept={name:row.name,recipe:row.recipe};
+  MEALS=MEALS.filter(m=>m!==row);render();
+
+  try{
+    await push({action:"clearMeal",id:row.id});
+  }catch(e){
+    row.name=kept.name;row.recipe=kept.recipe;
+    MEALS.push(row);render();
+    let msg=/unknown action/i.test(e.message||"")
+      ? "your api/notion.js is the old one, so deploy the updated server file and this works"
+      : (e.message||"the server refused it");
+    if(!/[.!?]$/.test(msg))msg+=".";
+    toast("Couldn't clear "+slot.toLowerCase()+": "+msg+" It's still set in Notion, so nothing changed.");
+    return;
+  }
+
+  try{
+    absorb(await pull());
+    render();
+    const still=MEALS.filter(m=>m.date===row.date&&m.slot===slot&&m.name)[0];
+    if(still){
+      toast("The server said OK but "+slot.toLowerCase()+" is still \u201c"+still.name+
+            "\u201d in Notion. Something's wrong on the server side.");
+    }
+  }catch(e){
+    render();
+    toast("Sent the clear, but couldn't re-check Notion: "+e.message);
+  }
+}
+
 /* ---------- events ---------- */
 document.addEventListener("click",function(e){
   const t=e.target;
@@ -737,6 +820,9 @@ document.addEventListener("click",function(e){
 
   const pick=t.closest?t.closest("[data-pick]"):null;
   if(pick){pickMeal(openSlot,pick.getAttribute("data-pick"),pick.getAttribute("data-rid")||null);return;}
+
+  const clr=t.closest?t.closest("[data-clear]"):null;
+  if(clr){clearMeal(clr.getAttribute("data-clear"));return;}
 
   const slot=t.closest?t.closest(".slot"):null;
   if(slot){const s=slot.getAttribute("data-slot");openSlot=(openSlot===s)?null:s;render();return;}
