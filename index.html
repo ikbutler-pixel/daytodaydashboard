@@ -72,6 +72,8 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 .picker-sep{border-top:1px solid var(--line);margin:5px 3px;}
 .picker-note{font-size:12px;color:var(--text-3);padding:2px 7px 6px;line-height:1.45;}
 .picker-clear{color:var(--text-2);}
+.picker-other{display:flex;gap:5px;padding:4px 7px 5px;align-items:center;}
+.picker-other input[type=text]{flex:1;min-width:0;font-size:13px;}
 
 .cols{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.95fr);gap:22px;}
 .colh{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3);height:24px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
@@ -343,6 +345,24 @@ function slotOf(type){
    recipe attached, so a dining-hall day still fills the slot. */
 const EATING_OUT=["Dining hall","Restaurant"];
 
+/* "Other" in the eating-out list. Holds {date,slot} while its text box is open,
+   so only one box exists at a time and it survives a re-render of the picker
+   it lives in. Whatever gets typed is saved as a plain name with no recipe
+   attached, exactly like Dining hall — which means it contributes nothing to
+   the calorie and protein rollups, same as the other two. */
+let otherOpen=null;
+function otherRow(date,slot){
+  const on=otherOpen&&otherOpen.date===date&&otherOpen.slot===slot;
+  if(!on){
+    return '<div class="picker-i" data-oopen="1" data-oodate="'+date+
+           '" data-ooslot="'+slot+'"><span>Other…</span></div>';
+  }
+  return '<div class="picker-other">'+
+         '<input type="text" id="otherInput" placeholder="Where / what?" maxlength="80" />'+
+         '<button class="btn-sm" data-oogo="1" data-oodate="'+date+
+         '" data-ooslot="'+slot+'">Add</button></div>';
+}
+
 /* ---------- state ---------- */
 let CAL=[],TASKS=[],MEALS=[],RECIPES=[];
 let mealsEnabled=true;
@@ -513,6 +533,7 @@ function renderMeals(){
            '<span>'+esc(n)+'</span>'+
            (cur===n?'<span class="tick">✓</span>':'')+'</div>';
       });
+      h+=otherRow(view,slot);
       if(set){
         h+='<div class="picker-sep"></div>'+
            '<div class="picker-i picker-clear" data-clear="'+slot+'">Clear this slot</div>';
@@ -819,6 +840,7 @@ function mpPicker(date,slot,cur){
        '<span>'+esc(n)+'</span>'+
        (cur===n?'<span class="tick">✓</span>':'')+'</div>';
   });
+  h+=otherRow(date,slot);
   if(cur){
     h+='<div class="picker-sep"></div>'+
        '<div class="picker-i picker-clear" data-mpclear="'+date+'" data-mpcslot="'+slot+'">Clear this slot</div>';
@@ -881,6 +903,16 @@ async function moveTask(id,date){
   catch(e){t.date=was;render();toast("Didn't save: "+e.message);}
 }
 
+/* Reads the Other box and saves it. Trimmed, because a stray space would
+   otherwise create a Meal Plan row whose name is blank-looking but not empty,
+   and those don't count as a planned day. */
+function commitOther(date,slot){
+  const f=document.getElementById("otherInput");
+  const typed=f?f.value.trim():"";
+  otherOpen=null;
+  pickMeal(date,slot,typed||"Other",null);
+}
+
 /* Setting a meal. The date is passed in rather than read off `view`, because
    this is now driven from two places: the single-day strip, which always means
    today's view, and the 14-day grid, where every card is a different day. */
@@ -892,7 +924,7 @@ async function pickMeal(date,slot,name,recipeId){
   let row=existing;
   if(row){row.name=name;row.recipe=rec;}
   else{row={id:null,date:date,slot:slot,name:name,recipe:rec};MEALS.push(row);}
-  openSlot=null;mpOpen=null;render();
+  openSlot=null;mpOpen=null;otherOpen=null;render();
   try{
     const r=await push({action:"setMeal",id:row.id,date:date,slot:slot,name:name,recipeId:recipeId||null});
     if(r&&r.meal)row.id=r.meal.id;
@@ -917,7 +949,7 @@ async function pickMeal(date,slot,name,recipeId){
 async function clearMeal(date,slot){
   const row=MEALS.filter(m=>m.date===date&&m.slot===slot)[0];
   if(!row)return;
-  openSlot=null;mpOpen=null;
+  openSlot=null;mpOpen=null;otherOpen=null;
 
   if(!row.id){
     MEALS=MEALS.filter(m=>m!==row);render();
@@ -962,6 +994,24 @@ document.addEventListener("click",function(e){
 
   const cb=t.closest?t.closest("[data-toggle]"):null;
   if(cb){toggle(cb.getAttribute("data-toggle"));return;}
+
+  /* "Other" in the eating-out list. Opening it swaps the row for a text box;
+     committing saves whatever was typed. An empty box saves the literal word
+     "Other" rather than nothing, so the slot never ends up half-filled. */
+  const ooOpen=t.closest?t.closest("[data-oopen]"):null;
+  if(ooOpen){
+    otherOpen={date:ooOpen.getAttribute("data-oodate"),slot:ooOpen.getAttribute("data-ooslot")};
+    render();
+    const f=document.getElementById("otherInput");
+    if(f)f.focus();
+    return;
+  }
+  const ooGo=t.closest?t.closest("[data-oogo]"):null;
+  if(ooGo){commitOther(ooGo.getAttribute("data-oodate"),ooGo.getAttribute("data-ooslot"));return;}
+
+  /* A click inside an open picker — on its padding, or on the text box — must
+     never reach the slot toggles below, which would shut the picker mid-type. */
+  if(t.closest&&t.closest(".picker"))return;
 
   /* The 14-day grid is checked first: its picks carry their own date, so they
      must not fall through to the single-day handlers, which assume `view`. */
@@ -1059,6 +1109,7 @@ document.addEventListener("change",function(e){
 
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape"){
+    if(otherOpen){otherOpen=null;render();return;}
     if(!document.getElementById("mpOvl").hidden){
       if(mpOpen){mpOpen=null;renderMP();return;}
       document.getElementById("mpOvl").hidden=true;return;
@@ -1068,6 +1119,7 @@ document.addEventListener("keydown",function(e){
   }
   if(e.key==="Enter"){
     const id=e.target.id||"";
+    if(id==="otherInput"&&otherOpen){commitOther(otherOpen.date,otherOpen.slot);return;}
     if(id==="addName"){document.getElementById("addGo").click();return;}
     if(id==="ndName"){document.getElementById("ndGo").click();return;}
     if(id==="tmNdName"){document.getElementById("tmNdGo").click();return;}
