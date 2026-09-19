@@ -149,6 +149,38 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 .mdate{font-size:12px;padding:2px 5px;flex:none;}
 .mkind{font-size:12px;padding:2px 4px;flex:none;}
 
+/* ---- 14-day meal plan ---- */
+/* Slot colours are the only thing carrying meaning at a glance here, so they
+   also get a written label — colour alone would be useless to anyone who can't
+   separate the three hues. */
+.mpwide{max-width:980px;}
+.mpgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:9px;}
+.mpday{border:1px solid var(--line);border-radius:var(--radius);padding:8px 9px 7px;}
+.mpday.today{border-color:#37352f;}
+.mphead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
+.mpdow{font-size:13px;font-weight:600;}
+.mpnum{font-size:11px;color:var(--text-3);}
+.mpslot{display:flex;gap:7px;align-items:flex-start;padding:5px 4px;margin:0 -4px;
+  border-top:1px solid var(--line);cursor:pointer;position:relative;border-radius:4px;}
+.mpslot:first-of-type{border-top:none;}
+.mpslot:hover{background:var(--hover);}
+.mpslot.open{background:var(--panel);}
+.mpbar{width:3px;border-radius:2px;align-self:stretch;min-height:26px;flex:none;}
+.mpslot.b .mpbar{background:#d9a441;}
+.mpslot.l .mpbar{background:#d4703a;}
+.mpslot.d .mpbar{background:#7d5fa8;}
+.mptext{min-width:0;flex:1;}
+.mpl{font-size:10px;color:var(--text-3);letter-spacing:.03em;display:block;line-height:1.3;}
+.mpslot.b .mpl{color:#a87c26;}
+.mpslot.l .mpl{color:#b05524;}
+.mpslot.d .mpl{color:#634790;}
+.mpv{font-size:12.5px;line-height:1.3;display:block;word-break:break-word;}
+.mpv.none{color:var(--text-3);}
+.mpfoot{font-size:11px;color:var(--text-3);margin-top:12px;line-height:1.5;}
+@media(max-width:560px){
+  .mpgrid{grid-template-columns:minmax(0,1fr);}
+}
+
 @media(max-width:900px){
   .wrap{padding:14px 14px 40px;}
   .cols{grid-template-columns:minmax(0,1fr);gap:26px;}
@@ -177,6 +209,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
     </div>
     <div class="navrow">
       <span id="busy">saving…</span>
+      <button id="openMP">Meal plan</button>
       <button class="btn-icon" id="prevDay" aria-label="Previous day">‹</button>
       <button id="todayBtn">Today</button>
       <button class="btn-icon" id="nextDay" aria-label="Next day">›</button>
@@ -215,6 +248,25 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 </div>
 
 <div id="toast" hidden></div>
+
+<div class="ovl" id="mpOvl" hidden>
+  <div class="modal mpwide" role="dialog" aria-label="Meal plan">
+    <div class="modal-h">
+      <div>
+        <div class="modal-t">Meal plan</div>
+        <div class="hdr-sub" id="mpSub"></div>
+      </div>
+      <div class="navrow">
+        <button class="btn-icon" id="prevMP" aria-label="Previous 14 days">‹</button>
+        <button class="btn-sm" id="mpToday">Today</button>
+        <button class="btn-icon" id="nextMP" aria-label="Next 14 days">›</button>
+        <button class="btn-icon" id="closeMP" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <div id="mpBody"></div>
+  </div>
+</div>
 
 <div class="ovl" id="tmOvl" hidden>
   <div class="modal" role="dialog" aria-label="Task manager">
@@ -298,6 +350,12 @@ let TODAY=isoOf(new Date());
 let view=TODAY;
 let wkStart=startOfWeek(TODAY);
 let openSlot=null;
+/* The 14-day plan overlay. mpStart is the first day shown; mpOpen is which
+   slot on which day has its picker open, so two days can't both be open at
+   once. Kept separate from openSlot, which belongs to the single-day strip. */
+let mpStart=TODAY;
+let mpOpen=null;
+const MP_DAYS=14;
 let addOpen={day:false,nodate:false};
 let loaded=false,loadError=null,busy=0;
 let _tmp=0;
@@ -686,6 +744,88 @@ function renderTM(){
   body.innerHTML=h;
 }
 
+/* ---------- 14-day meal plan ---------- */
+/* One card per day, three slots per card. Tapping a slot opens the same picker
+   the single-day strip uses, so there's one place where a meal gets chosen and
+   one set of rules about what's allowed in a slot.
+
+   Slots always render in Breakfast/Lunch/Dinner order regardless of what came
+   back from Notion, because SLOTS drives the loop rather than the row order. */
+const SLOT_CLASS={Breakfast:"b",Lunch:"l",Dinner:"d"};
+
+function renderMP(){
+  const body=document.getElementById("mpBody");
+  const sub=document.getElementById("mpSub");
+  if(!mealsEnabled){
+    sub.textContent="";
+    body.innerHTML='<div class="empty">Meal planning is off. Set NOTION_MEALPLAN_DB in Vercel and redeploy to turn it on.</div>';
+    return;
+  }
+
+  const last=addDays(mpStart,MP_DAYS-1);
+  sub.textContent=shortDate(mpStart)+" – "+shortDate(last);
+
+  let filled=0;
+  let h='<div class="mpgrid">';
+  for(let i=0;i<MP_DAYS;i++){
+    const d=addDays(mpStart,i);
+    const m=mealsOn(d);
+    h+='<div class="mpday'+(d===TODAY?" today":"")+'">'+
+       '<div class="mphead"><span class="mpdow">'+DOW[parse(d).getDay()]+'</span>'+
+       '<span class="mpnum">'+MONS[parse(d).getMonth()]+" "+parse(d).getDate()+'</span></div>';
+    SLOTS.forEach(slot=>{
+      const set=!!(m[slot]&&m[slot].name);
+      if(set)filled++;
+      const isOpen=!!(mpOpen&&mpOpen.date===d&&mpOpen.slot===slot);
+      h+='<div class="mpslot '+SLOT_CLASS[slot]+(isOpen?" open":"")+
+         '" data-mpslot="'+d+'" data-mpsname="'+slot+'">'+
+         '<div class="mpbar"></div><div class="mptext">'+
+         '<span class="mpl">'+slot+'</span>'+
+         '<span class="mpv'+(set?"":" none")+'">'+esc(set?m[slot].name:"—")+'</span>'+
+         '</div>';
+      if(isOpen)h+=mpPicker(d,slot,set?m[slot].name:null);
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+
+  const total=MP_DAYS*3;
+  h+='<div class="mpfoot">'+filled+' of '+total+' slots planned. '+
+     'Changes save to the Meal Plan database straight away — edit here or in Notion, '+
+     'whichever you touched last wins.</div>';
+  body.innerHTML=h;
+}
+
+/* The picker, rendered inside a day card. Same contents as the single-day one:
+   MP recipes matching the slot, the eating-out options, and a clear. */
+function mpPicker(date,slot,cur){
+  const opts=optionsFor(slot);
+  let h='<div class="picker"><div class="picker-h">Cook</div>';
+  if(!opts.length){
+    h+='<div class="picker-note">No MP '+slot+' recipes loaded. Tag the recipe MP '+
+       slot+' in Meals &amp; Recipes and it shows up here.</div>';
+  }
+  opts.forEach(o=>{
+    h+='<div class="picker-i" data-mppick="'+esc(o.name)+'" data-mpdate="'+date+
+       '" data-mpslotname="'+slot+'" data-mprid="'+esc(o.id||"")+'">'+
+       '<span>'+esc(o.name)+'</span>'+
+       (cur===o.name?'<span class="tick">✓</span>':'')+'</div>';
+  });
+  h+='<div class="picker-sep"></div><div class="picker-h">Eating out</div>';
+  EATING_OUT.forEach(n=>{
+    h+='<div class="picker-i" data-mppick="'+esc(n)+'" data-mpdate="'+date+
+       '" data-mpslotname="'+slot+'" data-mprid="">'+
+       '<span>'+esc(n)+'</span>'+
+       (cur===n?'<span class="tick">✓</span>':'')+'</div>';
+  });
+  if(cur){
+    h+='<div class="picker-sep"></div>'+
+       '<div class="picker-i picker-clear" data-mpclear="'+date+'" data-mpcslot="'+slot+'">Clear this slot</div>';
+  }
+  return h+'</div>';
+}
+
 /* ---------- render ---------- */
 function render(){
   const stage=document.getElementById("stage");
@@ -703,6 +843,7 @@ function render(){
   renderHeader();renderMeals();renderSchedule();renderTodo();renderUpcoming();renderTomorrow();
   renderBusy();
   if(!document.getElementById("tmOvl").hidden)renderTM();
+  if(!document.getElementById("mpOvl").hidden)renderMP();
 }
 
 /* ---------- actions (optimistic, reverted if the save fails) ---------- */
@@ -740,16 +881,20 @@ async function moveTask(id,date){
   catch(e){t.date=was;render();toast("Didn't save: "+e.message);}
 }
 
-async function pickMeal(slot,name,recipeId){
-  const existing=MEALS.filter(m=>m.date===view&&m.slot===slot)[0];
+/* Setting a meal. The date is passed in rather than read off `view`, because
+   this is now driven from two places: the single-day strip, which always means
+   today's view, and the 14-day grid, where every card is a different day. */
+async function pickMeal(date,slot,name,recipeId){
+  if(!date||!slot)return;
+  const existing=MEALS.filter(m=>m.date===date&&m.slot===slot)[0];
   const rec=recipeId?[recipeId]:[];
   const was=existing?{name:existing.name,recipe:existing.recipe}:null;
   let row=existing;
   if(row){row.name=name;row.recipe=rec;}
-  else{row={id:null,date:view,slot:slot,name:name,recipe:rec};MEALS.push(row);}
-  openSlot=null;render();
+  else{row={id:null,date:date,slot:slot,name:name,recipe:rec};MEALS.push(row);}
+  openSlot=null;mpOpen=null;render();
   try{
-    const r=await push({action:"setMeal",id:row.id,date:view,slot:slot,name:name,recipeId:recipeId||null});
+    const r=await push({action:"setMeal",id:row.id,date:date,slot:slot,name:name,recipeId:recipeId||null});
     if(r&&r.meal)row.id=r.meal.id;
   }catch(e){
     if(!was&&!row.id)MEALS=MEALS.filter(m=>m!==row);
@@ -769,10 +914,10 @@ async function pickMeal(slot,name,recipeId){
    again. And if the meal can't be cleared, it goes straight back on screen,
    because a slot that looks empty here while it's still filled in Notion is
    worse than no button at all. */
-async function clearMeal(slot){
-  const row=MEALS.filter(m=>m.date===view&&m.slot===slot)[0];
+async function clearMeal(date,slot){
+  const row=MEALS.filter(m=>m.date===date&&m.slot===slot)[0];
   if(!row)return;
-  openSlot=null;
+  openSlot=null;mpOpen=null;
 
   if(!row.id){
     MEALS=MEALS.filter(m=>m!==row);render();
@@ -818,11 +963,34 @@ document.addEventListener("click",function(e){
   const cb=t.closest?t.closest("[data-toggle]"):null;
   if(cb){toggle(cb.getAttribute("data-toggle"));return;}
 
+  /* The 14-day grid is checked first: its picks carry their own date, so they
+     must not fall through to the single-day handlers, which assume `view`. */
+  const mpPick=t.closest?t.closest("[data-mppick]"):null;
+  if(mpPick){
+    pickMeal(mpPick.getAttribute("data-mpdate"),
+             mpPick.getAttribute("data-mpslotname"),
+             mpPick.getAttribute("data-mppick"),
+             mpPick.getAttribute("data-mprid")||null);
+    return;
+  }
+  const mpClr=t.closest?t.closest("[data-mpclear]"):null;
+  if(mpClr){
+    clearMeal(mpClr.getAttribute("data-mpclear"),mpClr.getAttribute("data-mpcslot"));
+    return;
+  }
+  const mpSlot=t.closest?t.closest("[data-mpslot]"):null;
+  if(mpSlot){
+    const d=mpSlot.getAttribute("data-mpslot"),s=mpSlot.getAttribute("data-mpsname");
+    mpOpen=(mpOpen&&mpOpen.date===d&&mpOpen.slot===s)?null:{date:d,slot:s};
+    renderMP();return;
+  }
+  if(mpOpen&&!document.getElementById("mpOvl").hidden){mpOpen=null;renderMP();}
+
   const pick=t.closest?t.closest("[data-pick]"):null;
-  if(pick){pickMeal(openSlot,pick.getAttribute("data-pick"),pick.getAttribute("data-rid")||null);return;}
+  if(pick){pickMeal(view,openSlot,pick.getAttribute("data-pick"),pick.getAttribute("data-rid")||null);return;}
 
   const clr=t.closest?t.closest("[data-clear]"):null;
-  if(clr){clearMeal(clr.getAttribute("data-clear"));return;}
+  if(clr){clearMeal(view,clr.getAttribute("data-clear"));return;}
 
   const slot=t.closest?t.closest(".slot"):null;
   if(slot){const s=slot.getAttribute("data-slot");openSlot=(openSlot===s)?null:s;render();return;}
@@ -872,6 +1040,12 @@ document.addEventListener("click",function(e){
   if(t.id==="nextDay"){view=addDays(view,1);openSlot=null;addOpen.day=false;render();return;}
   if(t.id==="todayBtn"){TODAY=isoOf(new Date());view=TODAY;openSlot=null;render();load();return;}
 
+  if(t.id==="openMP"){mpStart=view;mpOpen=null;document.getElementById("mpOvl").hidden=false;renderMP();return;}
+  if(t.id==="closeMP"||t.id==="mpOvl"){document.getElementById("mpOvl").hidden=true;mpOpen=null;return;}
+  if(t.id==="prevMP"){mpStart=addDays(mpStart,-MP_DAYS);mpOpen=null;renderMP();return;}
+  if(t.id==="nextMP"){mpStart=addDays(mpStart,MP_DAYS);mpOpen=null;renderMP();return;}
+  if(t.id==="mpToday"){mpStart=TODAY;mpOpen=null;renderMP();return;}
+
   if(t.id==="openTM"){wkStart=startOfWeek(view);document.getElementById("tmOvl").hidden=false;renderTM();return;}
   if(t.id==="closeTM"||t.id==="tmOvl"){document.getElementById("tmOvl").hidden=true;return;}
   if(t.id==="prevWk"){wkStart=addDays(wkStart,-7);renderTM();return;}
@@ -885,6 +1059,10 @@ document.addEventListener("change",function(e){
 
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape"){
+    if(!document.getElementById("mpOvl").hidden){
+      if(mpOpen){mpOpen=null;renderMP();return;}
+      document.getElementById("mpOvl").hidden=true;return;
+    }
     if(!document.getElementById("tmOvl").hidden){document.getElementById("tmOvl").hidden=true;return;}
     if(openSlot){openSlot=null;render();}
   }
