@@ -415,7 +415,8 @@ function absorb(data){
   }).filter(e=>e.date);
   TASKS=(data.tasks||[]).map(t=>({
     id:t.id,name:t.name,date:t.date?t.date.slice(0,10):null,
-    kind:t.kind==="Errand"?"Errand":"Task",done:!!t.done
+    kind:t.kind==="Errand"?"Errand":"Task",done:!!t.done,
+    edited:t.last_edited_time||t.lastEdited||t.edited||null
   }));
   MEALS=(data.meals||[]).map(m=>({
     id:m.id,name:m.name,date:m.date.slice(0,10),slot:m.slot,recipe:m.recipe||[]
@@ -462,7 +463,35 @@ function optionsFor(slot){
 }
 
 function tasksOn(d,kind){return TASKS.filter(t=>t.date===d&&t.kind===kind);}
-function undated(){return TASKS.filter(t=>!t.date);}
+/* Finished no-date tasks are swept off the list at noon. Anything ticked off
+   since the last noon stays visible (struck through) until the next one.
+
+   When each task was finished comes from Notion's last-edited time if the
+   server sends it, and otherwise from this browser's own record of when you
+   checked it here. A finished task with neither counts as old and is hidden. */
+const DONE_KEY="dash.doneAt";
+let doneAt={};
+try{doneAt=JSON.parse(localStorage.getItem(DONE_KEY)||"{}")||{};}catch(e){doneAt={};}
+function saveDoneAt(){
+  const old=Date.now()-3*MS;
+  Object.keys(doneAt).forEach(k=>{if(doneAt[k]<old)delete doneAt[k];});
+  try{localStorage.setItem(DONE_KEY,JSON.stringify(doneAt));}catch(e){}
+}
+function lastNoon(){
+  const d=new Date();
+  if(d.getHours()<12)d.setDate(d.getDate()-1);
+  d.setHours(12,0,0,0);
+  return d.getTime();
+}
+function finishedAt(t){
+  if(doneAt[t.id])return doneAt[t.id];
+  const e=t.edited?Date.parse(t.edited):NaN;
+  return isNaN(e)?0:e;
+}
+function undated(){
+  const cut=lastNoon();
+  return TASKS.filter(t=>!t.date&&(!t.done||finishedAt(t)>=cut));
+}
 function unfinishedTasks(){
   return TASKS.filter(t=>t.kind==="Task"&&!t.done&&t.date&&t.date<TODAY&&diffDays(TODAY,t.date)<=UNFINISHED_WINDOW)
               .sort((a,b)=>a.date<b.date?-1:1);
@@ -873,7 +902,10 @@ async function toggle(id){
   const t=TASKS.filter(x=>x.id===id)[0];
   if(!t)return;
   const was=t.done;
-  t.done=!was;render();
+  t.done=!was;
+  if(t.done)doneAt[id]=Date.now();else delete doneAt[id];
+  saveDoneAt();
+  render();
   try{await push({action:"updateTask",id:id,done:t.done});}
   catch(e){t.done=was;render();toast("Didn't save: "+e.message);}
 }
@@ -1140,6 +1172,13 @@ document.addEventListener("visibilitychange",function(){
     load();
   }
 });
+
+/* If the page is left open across noon, sweep the finished tasks then. */
+let _noon=lastNoon();
+setInterval(function(){
+  const n=lastNoon();
+  if(n!==_noon){_noon=n;if(loaded)render();}
+},60000);
 
 render();
 load();
