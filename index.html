@@ -147,6 +147,11 @@ input[type=text]:focus,input[type=date]:focus,select:focus{outline:none;border-c
 .day-b{padding-right:6px;}
 .mrow{display:flex;align-items:flex-start;gap:9px;padding:2px 0;}
 .mrow .row-t{font-size:13px;}
+.row-t[data-edit]{cursor:text;border-radius:3px;}
+.row-t[data-edit]:hover{background:var(--hover);}
+.row-edit{flex:1;min-width:0;font-family:inherit;font-size:13px;color:var(--text);background:var(--bg);
+  border:1px solid #37352f;border-radius:var(--radius);padding:1px 6px;line-height:1.45;}
+.row-edit:focus{outline:none;}
 .mrow.done .row-t{color:var(--text-3);text-decoration:line-through;}
 .mdate{font-size:12px;padding:2px 5px;flex:none;}
 .mkind{font-size:12px;padding:2px 4px;flex:none;}
@@ -377,6 +382,15 @@ let mpStart=TODAY;
 let mpOpen=null;
 const MP_DAYS=14;
 let addOpen={day:false,nodate:false};
+/* The task whose name is being edited, and what's typed so far. The draft is
+   kept here so a re-render mid-typing doesn't throw it away. */
+let editing=null,editDraft="";
+function nameCell(t){
+  if(editing===t.id){
+    return '<input type="text" class="row-edit" id="editInput" value="'+esc(editDraft)+'" maxlength="200" aria-label="Task name" />';
+  }
+  return '<div class="row-t" data-edit="'+t.id+'" title="Click to rename">'+esc(t.name)+'</div>';
+}
 let loaded=false,loadError=null,busy=0;
 let _tmp=0;
 const UNFINISHED_WINDOW=7;
@@ -657,7 +671,7 @@ function taskRow(t,opts){
   }
   return '<div class="row'+(t.done?" done":"")+'">'+
     '<div class="cb'+(t.done?" on":"")+'" data-toggle="'+t.id+'" role="checkbox" aria-checked="'+t.done+'" tabindex="0"></div>'+
-    '<div class="row-t">'+esc(t.name)+'</div>'+right+'</div>';
+    nameCell(t)+right+'</div>';
 }
 
 function renderTodo(){
@@ -751,7 +765,7 @@ function renderTM(){
     items.forEach(t=>{
       h+='<div class="mrow'+(t.done?" done":"")+'">'+
          '<div class="cb'+(t.done?" on":"")+'" data-toggle="'+t.id+'" role="checkbox" aria-checked="'+t.done+'" tabindex="0"></div>'+
-         '<div class="row-t">'+esc(t.name)+'</div>'+
+         nameCell(t)+
          (t.kind==="Errand"?'<span class="tag">errand</span>':'')+
          '<input type="date" class="mdate" value="'+t.date+'" data-move="'+t.id+'" aria-label="Date" />'+
          '</div>';
@@ -775,7 +789,7 @@ function renderTM(){
     nd.forEach(t=>{
       h+='<div class="mrow'+(t.done?" done":"")+'">'+
          '<div class="cb'+(t.done?" on":"")+'" data-toggle="'+t.id+'" role="checkbox" aria-checked="'+t.done+'" tabindex="0"></div>'+
-         '<div class="row-t">'+esc(t.name)+'</div>'+
+         nameCell(t)+
          (t.kind==="Errand"?'<span class="tag">errand</span>':'')+
          '<input type="date" class="mdate" value="" data-move="'+t.id+'" aria-label="Give it a date" />'+
          '</div>';
@@ -926,6 +940,38 @@ async function addTask(name,kind,date){
   return true;
 }
 
+function startEdit(id){
+  const t=TASKS.filter(x=>x.id===id)[0];
+  if(!t)return;
+  if(String(id).indexOf("tmp")===0){toast("That task is still saving. Try again in a second.");return;}
+  editing=id;editDraft=t.name;render();
+  const f=document.getElementById("editInput");
+  if(f){f.focus();f.select();}
+}
+function cancelEdit(){editing=null;editDraft="";render();}
+
+/* Renaming. Saved optimistically, then Notion is asked again: if the server
+   quietly ignored the new name, you're told instead of it silently reverting
+   on the next reload. */
+async function commitEdit(){
+  if(!editing)return;
+  const id=editing,name=editDraft.trim();
+  editing=null;editDraft="";
+  const t=TASKS.filter(x=>x.id===id)[0];
+  if(!t||!name||name===t.name){render();return;}
+  const was=t.name;
+  t.name=name;render();
+  try{await push({action:"updateTask",id:id,name:name});}
+  catch(e){t.name=was;render();toast("Didn't rename: "+e.message);return;}
+  try{
+    absorb(await pull());render();
+    const now=TASKS.filter(x=>x.id===id)[0];
+    if(now&&now.name!==name){
+      toast("The server didn't save the new name. Your api/notion.js needs to accept a name in updateTask.");
+    }
+  }catch(e){}
+}
+
 async function moveTask(id,date){
   const t=TASKS.filter(x=>x.id===id)[0];
   if(!t)return;
@@ -1023,6 +1069,11 @@ async function clearMeal(date,slot){
 document.addEventListener("click",function(e){
   const t=e.target;
   if(t.id==="retry"){loadError=null;render();load();return;}
+
+  if(t.id==="editInput")return;
+  if(editing)commitEdit();
+  const ed=t.closest?t.closest("[data-edit]"):null;
+  if(ed){startEdit(ed.getAttribute("data-edit"));return;}
 
   const cb=t.closest?t.closest("[data-toggle]"):null;
   if(cb){toggle(cb.getAttribute("data-toggle"));return;}
@@ -1134,6 +1185,10 @@ document.addEventListener("click",function(e){
   if(t.id==="nextWk"){wkStart=addDays(wkStart,7);renderTM();return;}
 });
 
+document.addEventListener("input",function(e){
+  if(e.target.id==="editInput")editDraft=e.target.value;
+});
+
 document.addEventListener("change",function(e){
   const mv=e.target.getAttribute?e.target.getAttribute("data-move"):null;
   if(mv)moveTask(mv,e.target.value||null);
@@ -1141,6 +1196,7 @@ document.addEventListener("change",function(e){
 
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape"){
+    if(editing){cancelEdit();return;}
     if(otherOpen){otherOpen=null;render();return;}
     if(!document.getElementById("mpOvl").hidden){
       if(mpOpen){mpOpen=null;renderMP();return;}
@@ -1151,6 +1207,7 @@ document.addEventListener("keydown",function(e){
   }
   if(e.key==="Enter"){
     const id=e.target.id||"";
+    if(id==="editInput"){commitEdit();return;}
     if(id==="otherInput"&&otherOpen){commitOther(otherOpen.date,otherOpen.slot);return;}
     if(id==="addName"){document.getElementById("addGo").click();return;}
     if(id==="ndName"){document.getElementById("ndGo").click();return;}
